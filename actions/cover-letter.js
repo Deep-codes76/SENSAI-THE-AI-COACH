@@ -120,3 +120,29 @@ export async function deleteCoverLetter(id) {
     },
   });
 }
+
+export async function updateCoverLetter(id, content) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const user = await db.user.findUnique({
+    where: { clerkUserId: userId },
+  });
+
+  if (!user) throw new Error("User not found");
+
+  try {
+    return await db.coverLetter.update({
+      where: {
+        id,
+        userId: user.id,
+      },
+      data: {
+        content,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating cover letter:", error.message);
+    throw new Error("Failed to update cover letter");
+  }
+}
