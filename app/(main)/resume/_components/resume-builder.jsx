@@ -21,7 +21,7 @@ import { saveResume } from "@/actions/resume";
 import { EntryForm } from "./entry-form";
 import useFetch from "@/hooks/use-fetch";
 import { useUser } from "@clerk/nextjs";
-import { entriesToMarkdown } from "@/app/lib/helper";
+import { entriesToMarkdown, parseMarkdownToForm } from "@/app/lib/helper";
 import { resumeSchema } from "@/app/lib/schema";
 import html2pdf from "html2pdf.js/dist/html2pdf.min.js";
 
@@ -36,6 +36,7 @@ export default function ResumeBuilder({ initialContent }) {
     register,
     handleSubmit,
     watch,
+    reset,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(resumeSchema),
@@ -60,8 +61,14 @@ export default function ResumeBuilder({ initialContent }) {
   const formValues = watch();
 
   useEffect(() => {
-    if (initialContent) setActiveTab("preview");
-  }, [initialContent]);
+    if (initialContent) {
+      setActiveTab("preview");
+      const parsedValues = parseMarkdownToForm(initialContent);
+      if (parsedValues) {
+        reset(parsedValues);
+      }
+    }
+  }, [initialContent, reset]);
 
   // Update preview content when form values change
   useEffect(() => {
