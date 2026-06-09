@@ -5,7 +5,12 @@ import { auth } from "@clerk/nextjs/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
+  generationConfig: {
+    responseMimeType: "application/json",
+  },
+});
 
 export const generateAIInsights = async (industry) => {
   const prompt = `
@@ -31,9 +36,27 @@ export const generateAIInsights = async (industry) => {
   const result = await model.generateContent(prompt);
   const response = result.response;
   const text = response.text();
-  const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
+  
+  let insights;
+  try {
+    insights = JSON.parse(text);
+  } catch (e) {
+    const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
+    try {
+      insights = JSON.parse(cleanedText);
+    } catch (e2) {
+      const firstBrace = text.indexOf("{");
+      const lastBrace = text.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        const jsonStr = text.substring(firstBrace, lastBrace + 1);
+        insights = JSON.parse(jsonStr);
+      } else {
+        throw e2;
+      }
+    }
+  }
 
-  return JSON.parse(cleanedText);
+  return insights;
 };
 
 export async function getIndustryInsights() {

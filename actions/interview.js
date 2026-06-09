@@ -5,7 +5,12 @@ import { auth } from "@clerk/nextjs/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
+  generationConfig: {
+    responseMimeType: "application/json",
+  },
+});
 
 export async function generateQuiz() {
   const { userId } = await auth();
@@ -47,8 +52,25 @@ export async function generateQuiz() {
     const result = await model.generateContent(prompt);
     const response = result.response;
     const text = response.text();
-    const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
-    const quiz = JSON.parse(cleanedText);
+    
+    let quiz;
+    try {
+      quiz = JSON.parse(text);
+    } catch (e) {
+      const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
+      try {
+        quiz = JSON.parse(cleanedText);
+      } catch (e2) {
+        const firstBrace = text.indexOf("{");
+        const lastBrace = text.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace !== -1) {
+          const jsonStr = text.substring(firstBrace, lastBrace + 1);
+          quiz = JSON.parse(jsonStr);
+        } else {
+          throw e2;
+        }
+      }
+    }
 
     return quiz.questions;
   } catch (error) {
