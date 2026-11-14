@@ -1,13 +1,15 @@
-// app/resume/_components/entry-form.jsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format, parse } from "date-fns";
+import { Loader2, Pencil, PlusCircle, Sparkles, X } from "lucide-react";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -16,19 +18,23 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { entrySchema } from "@/app/lib/schema";
-import { Sparkles, PlusCircle, X, Pencil, Save, Loader2 } from "lucide-react";
+import { formatDisplayDate } from "@/app/lib/helper";
 import { improveWithAI } from "@/actions/resume";
-import { toast } from "sonner";
 import useFetch from "@/hooks/use-fetch";
 
-const formatDisplayDate = (dateString) => {
-  if (!dateString) return "";
-  const date = parse(dateString, "yyyy-MM", new Date());
-  return format(date, "MMM yyyy");
+const emptyEntry = {
+  title: "",
+  organization: "",
+  startDate: "",
+  endDate: "",
+  description: "",
+  current: false,
 };
 
-export function EntryForm({ type, entries, onChange }) {
-  const [isAdding, setIsAdding] = useState(false);
+export function EntryForm({ type, entries = [], onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  // null = adding a new entry, number = editing that index.
+  const [editingIndex, setEditingIndex] = useState(null);
 
   const {
     register,
@@ -39,236 +45,254 @@ export function EntryForm({ type, entries, onChange }) {
     setValue,
   } = useForm({
     resolver: zodResolver(entrySchema),
-    defaultValues: {
-      title: "",
-      organization: "",
-      startDate: "",
-      endDate: "",
-      description: "",
-      current: false,
-    },
+    defaultValues: emptyEntry,
   });
 
   const current = watch("current");
+  const description = watch("description");
 
-  const handleAdd = handleValidation((data) => {
-    const formattedEntry = {
-      ...data,
-      startDate: formatDisplayDate(data.startDate),
-      endDate: data.current ? "" : formatDisplayDate(data.endDate),
-    };
+  /*
+   * Entries are stored exactly as the `<input type="month">` value (yyyy-MM)
+   * and only formatted for display. The original code stored the formatted
+   * string ("Jan 2024") back into form state, so reopening an entry showed an
+   * empty, invalid date field.
+   */
+  const submitEntry = handleValidation((data) => {
+    const entry = { ...data, endDate: data.current ? "" : data.endDate };
 
-    onChange([...entries, formattedEntry]);
+    if (editingIndex === null) {
+      onChange([...entries, entry]);
+    } else {
+      onChange(entries.map((e, i) => (i === editingIndex ? entry : e)));
+    }
 
-    reset();
-    setIsAdding(false);
+    reset(emptyEntry);
+    setEditingIndex(null);
+    setIsOpen(false);
   });
 
-  const handleDelete = (index) => {
-    const newEntries = entries.filter((_, i) => i !== index);
-    onChange(newEntries);
+  const startEdit = (index) => {
+    reset({ ...emptyEntry, ...entries[index] });
+    setEditingIndex(index);
+    setIsOpen(true);
   };
 
-  const {
-    loading: isImproving,
-    fn: improveWithAIFn,
-    data: improvedContent,
-    error: improveError,
-  } = useFetch(improveWithAI);
+  const cancel = () => {
+    reset(emptyEntry);
+    setEditingIndex(null);
+    setIsOpen(false);
+  };
 
-  // Add this effect to handle the improvement result
-  useEffect(() => {
-    if (improvedContent && !isImproving) {
-      setValue("description", improvedContent);
-      toast.success("Description improved successfully!");
-    }
-    if (improveError) {
-      toast.error(improveError.message || "Failed to improve description");
-    }
-  }, [improvedContent, improveError, isImproving, setValue]);
+  const handleDelete = (index) => {
+    onChange(entries.filter((_, i) => i !== index));
+    if (editingIndex === index) cancel();
+  };
 
-  // Replace handleImproveDescription with this
+  const { loading: isImproving, fn: improveWithAIFn } = useFetch(improveWithAI);
+
   const handleImproveDescription = async () => {
-    const description = watch("description");
-    if (!description) {
-      toast.error("Please enter a description first");
+    if (!description?.trim()) {
+      toast.error("Write a description first, then let the AI sharpen it.");
       return;
     }
 
-    await improveWithAIFn({
+    const improved = await improveWithAIFn({
       current: description,
-      type: type.toLowerCase(), // 'experience', 'education', or 'project'
+      type: type.toLowerCase(),
     });
+
+    if (improved) {
+      setValue("description", improved, { shouldValidate: true });
+      toast.success("Description improved.");
+    }
   };
 
   return (
     <div className="space-y-4">
-      <div className="space-y-4">
-        {entries.map((item, index) => (
-          <Card key={index}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {item.title} @ {item.organization}
-              </CardTitle>
-              <Button
-                variant="outline"
-                size="icon"
-                type="button"
-                onClick={() => handleDelete(index)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                {item.current
-                  ? `${item.startDate} - Present`
-                  : `${item.startDate} - ${item.endDate}`}
-              </p>
-              <p className="mt-2 text-sm whitespace-pre-wrap">
-                {item.description}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {entries.length > 0 && (
+        <div className="space-y-3">
+          {entries.map((item, index) => (
+            <Card key={`${item.title}-${index}`} className="bg-muted/30">
+              <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+                <div className="min-w-0">
+                  <CardTitle className="truncate text-base">
+                    {item.title}
+                    {item.organization ? ` @ ${item.organization}` : ""}
+                  </CardTitle>
+                  <p className="numeric mt-1 text-xs text-muted-foreground">
+                    {formatDisplayDate(item.startDate)} —{" "}
+                    {item.current ? "Present" : formatDisplayDate(item.endDate)}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    type="button"
+                    aria-label={`Edit ${item.title}`}
+                    onClick={() => startEdit(index)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    type="button"
+                    aria-label={`Remove ${item.title}`}
+                    onClick={() => handleDelete(index)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                  {item.description}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
-      {isAdding && (
-        <Card>
+      {isOpen && (
+        <Card className="border-primary/30">
           <CardHeader>
-            <CardTitle>Add {type}</CardTitle>
+            <CardTitle className="text-base">
+              {editingIndex === null ? `Add ${type}` : `Edit ${type}`}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Input
-                  placeholder="Title/Position"
-                  {...register("title")}
-                  error={errors.title}
-                />
+                <Label htmlFor={`${type}-title`}>Title / position</Label>
+                <Input id={`${type}-title`} {...register("title")} />
                 {errors.title && (
-                  <p className="text-sm text-red-500">{errors.title.message}</p>
+                  <p className="text-sm text-destructive">
+                    {errors.title.message}
+                  </p>
                 )}
               </div>
               <div className="space-y-2">
-                <Input
-                  placeholder="Organization/Company"
-                  {...register("organization")}
-                  error={errors.organization}
-                />
+                <Label htmlFor={`${type}-org`}>Organization</Label>
+                <Input id={`${type}-org`} {...register("organization")} />
                 {errors.organization && (
-                  <p className="text-sm text-red-500">
+                  <p className="text-sm text-destructive">
                     {errors.organization.message}
                   </p>
                 )}
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
+                <Label htmlFor={`${type}-start`}>Start date</Label>
                 <Input
+                  id={`${type}-start`}
                   type="month"
                   {...register("startDate")}
-                  error={errors.startDate}
                 />
                 {errors.startDate && (
-                  <p className="text-sm text-red-500">
+                  <p className="text-sm text-destructive">
                     {errors.startDate.message}
                   </p>
                 )}
               </div>
               <div className="space-y-2">
+                <Label htmlFor={`${type}-end`}>End date</Label>
                 <Input
+                  id={`${type}-end`}
                   type="month"
-                  {...register("endDate")}
                   disabled={current}
-                  error={errors.endDate}
+                  {...register("endDate")}
                 />
                 {errors.endDate && (
-                  <p className="text-sm text-red-500">
+                  <p className="text-sm text-destructive">
                     {errors.endDate.message}
                   </p>
                 )}
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <input
                 type="checkbox"
-                id="current"
+                id={`${type}-current`}
+                className="h-4 w-4 accent-[hsl(var(--primary))]"
                 {...register("current")}
                 onChange={(e) => {
                   setValue("current", e.target.checked);
-                  if (e.target.checked) {
-                    setValue("endDate", "");
-                  }
+                  if (e.target.checked) setValue("endDate", "");
                 }}
               />
-              <label htmlFor="current">Current {type}</label>
+              <Label htmlFor={`${type}-current`} className="font-normal">
+                I am currently here
+              </Label>
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor={`${type}-desc`}>Description</Label>
               <Textarea
-                placeholder={`Description of your ${type.toLowerCase()}`}
+                id={`${type}-desc`}
                 className="h-32"
+                placeholder={`What did you do, and what changed because of it?`}
                 {...register("description")}
-                error={errors.description}
               />
               {errors.description && (
-                <p className="text-sm text-red-500">
+                <p className="text-sm text-destructive">
                   {errors.description.message}
                 </p>
               )}
             </div>
+
             <Button
               type="button"
-              variant="ghost"
+              variant="secondary"
               size="sm"
               onClick={handleImproveDescription}
-              disabled={isImproving || !watch("description")}
+              disabled={isImproving || !description?.trim()}
             >
               {isImproving ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Improving...
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Improving…
                 </>
               ) : (
                 <>
-                  <Sparkles className="h-4 w-4 mr-2" />
+                  <Sparkles className="mr-2 h-4 w-4" />
                   Improve with AI
                 </>
               )}
             </Button>
           </CardContent>
-          <CardFooter className="flex justify-end space-x-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                reset();
-                setIsAdding(false);
-              }}
-            >
+          <CardFooter className="justify-end gap-2">
+            <Button type="button" variant="outline" onClick={cancel}>
               Cancel
             </Button>
-            <Button type="button" onClick={handleAdd}>
-              <PlusCircle className="h-4 w-4 mr-2" />
-              Add Entry
+            <Button type="button" onClick={submitEntry}>
+              {editingIndex === null ? "Add entry" : "Save changes"}
             </Button>
           </CardFooter>
         </Card>
       )}
 
-      {!isAdding && (
+      {!isOpen && (
         <Button
+          type="button"
           className="w-full"
           variant="outline"
-          onClick={() => setIsAdding(true)}
+          onClick={() => {
+            reset(emptyEntry);
+            setEditingIndex(null);
+            setIsOpen(true);
+          }}
         >
-          <PlusCircle className="h-4 w-4 mr-2" />
+          <PlusCircle className="mr-2 h-4 w-4" />
           Add {type}
         </Button>
       )}
     </div>
   );
 }
+
+export default EntryForm;

@@ -1,106 +1,149 @@
 "use server";
 
-import { db } from "@/lib/prisma";
-import { auth } from "@clerk/nextjs/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { z } from "zod";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
-  generationConfig: {
-    responseMimeType: "application/json",
-  },
+import { db } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth";
+import { generateJson, generateText } from "@/lib/ai";
+import { getCategory } from "@/app/lib/interview-categories";
+import {
+  DEMO_MODE,
+  demoAssessments,
+  demoDelay,
+  demoQuiz,
+} from "@/lib/demo";
+
+const QUESTION_COUNT = 10;
+
+const quizSchema = z.object({
+  questions: z
+    .array(
+      z.object({
+        question: z.string().min(1),
+        options: z.array(z.string().min(1)).min(2),
+        correctAnswer: z.string().min(1),
+        explanation: z.string().min(1),
+      })
+    )
+    .min(1),
 });
 
-export async function generateQuiz() {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+export async function generateQuiz(categoryKey = "technical") {
+  const category = getCategory(categoryKey);
 
-  const user = await db.user.findUnique({
-    where: { clerkUserId: userId },
-    select: {
-      industry: true,
-      skills: true,
-    },
-  });
+  if (DEMO_MODE) {
+    await demoDelay(1100);
+    return demoQuiz;
+  }
 
-  if (!user) throw new Error("User not found");
+  const user = await requireUser({ industry: true, skills: true });
+
+  if (!user.industry) {
+    throw new Error("Complete onboarding before starting a mock interview");
+  }
 
   const prompt = `
-    Generate 10 technical interview questions for a ${
-      user.industry
-    } professional${
+Generate ${QUESTION_COUNT} ${category.label} interview questions for a ${user.industry} professional${
     user.skills?.length ? ` with expertise in ${user.skills.join(", ")}` : ""
   }.
-    
-    Each question should be multiple choice with 4 options.
-    
-    Return the response in this JSON format only, no additional text:
+
+${category.instruction}
+
+Each question is multiple choice with exactly 4 distinct options.
+
+Return ONLY JSON in this shape:
+{
+  "questions": [
     {
-      "questions": [
-        {
-          "question": "string",
-          "options": ["string", "string", "string", "string"],
-          "correctAnswer": "string",
-          "explanation": "string"
-        }
-      ]
+      "question": "string",
+      "options": ["string", "string", "string", "string"],
+      "correctAnswer": "string",
+      "explanation": "string"
     }
-  `;
+  ]
+}
+
+Rules:
+- "correctAnswer" must be character-for-character identical to one of the "options".
+- Do not number the options or prefix them with letters.
+- Keep each explanation to one or two sentences.
+`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
-    
-    let quiz;
-    try {
-      quiz = JSON.parse(text);
-    } catch (e) {
-      const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
-      try {
-        quiz = JSON.parse(cleanedText);
-      } catch (e2) {
-        const firstBrace = text.indexOf("{");
-        const lastBrace = text.lastIndexOf("}");
-        if (firstBrace !== -1 && lastBrace !== -1) {
-          const jsonStr = text.substring(firstBrace, lastBrace + 1);
-          quiz = JSON.parse(jsonStr);
-        } else {
-          throw e2;
-        }
-      }
+    const raw = await generateJson(prompt);
+    const parsed = quizSchema.safeParse(raw);
+
+    if (!parsed.success) {
+      console.error("Invalid quiz payload:", parsed.error.flatten());
+      throw new Error("The AI returned questions in an unexpected format.");
     }
 
-    return quiz.questions;
+    // The model sometimes returns a correctAnswer that is a near-miss of one
+    // of the options (trailing period, different case). Without this, those
+    // questions are unanswerable: every choice scores as wrong.
+    const questions = parsed.data.questions
+      .map((q) => {
+        const exact = q.options.find((o) => o === q.correctAnswer);
+        if (exact) return q;
+
+        const loose = q.options.find(
+          (o) =>
+            o.trim().toLowerCase().replace(/[.]$/, "") ===
+            q.correctAnswer.trim().toLowerCase().replace(/[.]$/, "")
+        );
+        return loose ? { ...q, correctAnswer: loose } : null;
+      })
+      .filter(Boolean);
+
+    if (!questions.length) {
+      throw new Error("The AI returned no usable questions. Please try again.");
+    }
+
+    return questions;
   } catch (error) {
     console.error("Error generating quiz:", error);
-    throw new Error("Failed to generate quiz questions");
+    throw new Error(error?.message || "Failed to generate quiz questions");
   }
 }
 
-export async function saveQuizResult(questions, answers, score) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+export async function saveQuizResult(questions, answers, score, categoryKey = "technical") {
+  const category = getCategory(categoryKey);
 
-  const user = await db.user.findUnique({
-    where: { clerkUserId: userId },
-  });
+  if (DEMO_MODE) {
+    await demoDelay(700);
+    return {
+      id: "demo-result",
+      quizScore: score,
+      category: category.label,
+      createdAt: new Date(),
+      improvementTip:
+        "Demo mode: in the live app this tip is generated from the questions you got wrong.",
+      questions: questions.map((q, i) => ({
+        question: q.question,
+        answer: q.correctAnswer,
+        userAnswer: answers?.[i] ?? null,
+        isCorrect: q.correctAnswer === answers?.[i],
+        explanation: q.explanation,
+      })),
+    };
+  }
 
-  if (!user) throw new Error("User not found");
+  const user = await requireUser();
+
+  if (!Array.isArray(questions) || !questions.length) {
+    throw new Error("No quiz questions to save");
+  }
 
   const questionResults = questions.map((q, index) => ({
     question: q.question,
     answer: q.correctAnswer,
-    userAnswer: answers[index],
-    isCorrect: q.correctAnswer === answers[index],
+    userAnswer: answers?.[index] ?? null,
+    isCorrect: q.correctAnswer === answers?.[index],
     explanation: q.explanation,
   }));
 
-  // Get wrong answers
   const wrongAnswers = questionResults.filter((q) => !q.isCorrect);
 
-  // Only generate improvement tips if there are wrong answers
   let improvementTip = null;
   if (wrongAnswers.length > 0) {
     const wrongQuestionsText = wrongAnswers
@@ -110,40 +153,34 @@ export async function saveQuizResult(questions, answers, score) {
       )
       .join("\n\n");
 
-    const improvementPrompt = `
-      The user got the following ${user.industry} technical interview questions wrong:
-
-      ${wrongQuestionsText}
-
-      Based on these mistakes, provide a concise, specific improvement tip.
-      Focus on the knowledge gaps revealed by these wrong answers.
-      Keep the response under 2 sentences and make it encouraging.
-      Don't explicitly mention the mistakes, instead focus on what to learn/practice.
-    `;
-
     try {
-      const tipResult = await model.generateContent(improvementPrompt);
+      improvementTip = await generateText(`
+The user got the following ${user.industry} ${category.label} interview questions wrong:
 
-      improvementTip = tipResult.response.text().trim();
-      console.log(improvementTip);
+${wrongQuestionsText}
+
+Based on these mistakes, give one concise, specific improvement tip.
+Focus on the knowledge gaps the wrong answers reveal.
+Keep it under two sentences and make it encouraging.
+Do not mention the mistakes explicitly; focus on what to learn or practise.
+`);
     } catch (error) {
+      // A missing tip is cosmetic. Losing the user's quiz result is not, so
+      // this failure must never prevent the assessment from being saved.
       console.error("Error generating improvement tip:", error);
-      // Continue without improvement tip if generation fails
     }
   }
 
   try {
-    const assessment = await db.assessment.create({
+    return await db.assessment.create({
       data: {
         userId: user.id,
         quizScore: score,
         questions: questionResults,
-        category: "Technical",
+        category: category.label,
         improvementTip,
       },
     });
-
-    return assessment;
   } catch (error) {
     console.error("Error saving quiz result:", error);
     throw new Error("Failed to save quiz result");
@@ -151,26 +188,20 @@ export async function saveQuizResult(questions, answers, score) {
 }
 
 export async function getAssessments() {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  if (DEMO_MODE) {
+    await demoDelay(300);
+    return demoAssessments;
+  }
 
-  const user = await db.user.findUnique({
-    where: { clerkUserId: userId },
-  });
-
-  if (!user) throw new Error("User not found");
+  const user = await requireUser();
 
   try {
-    const assessments = await db.assessment.findMany({
-      where: {
-        userId: user.id,
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
+    // Newest first: the UI labels the top entry "Latest" and the stats cards
+    // read index 0, both of which were showing the oldest quiz.
+    return await db.assessment.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
     });
-
-    return assessments;
   } catch (error) {
     console.error("Error fetching assessments:", error);
     throw new Error("Failed to fetch assessments");
