@@ -161,6 +161,16 @@ To configure it by hand instead, create a **Web Service** with:
 - **Health check path** — `/`
 - **Node version** — 20 (pinned by `.node-version`)
 
+If the build fails, run `npm run check:env` — it validates every required
+variable and names the problem. It also runs as the second step of the build
+command, because Prisma's own error for a missing `DATABASE_URL` is
+"the URL must start with the protocol `postgresql://`", which points at the
+connection string rather than at the variable being absent.
+
+> **Do not quote values in a dashboard.** `.env` files strip surrounding
+> quotes; Render stores them literally, so `DATABASE_URL="postgresql://…"`
+> arrives with a leading `"` and fails validation.
+
 Three things worth knowing:
 
 - Migrations run in the build command rather than a `preDeployCommand`, because
