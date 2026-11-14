@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
 import { useTheme } from "next-themes";
 
@@ -12,13 +13,21 @@ import { useTheme } from "next-themes";
  */
 export default function ClerkThemeProvider({ children, darkTheme }) {
   const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // `resolvedTheme` is undefined on the server, so reading it during the first
+  // render makes the server and client disagree about Clerk's appearance.
+  // The theme is applied once mounted instead; both sides start neutral.
+  useEffect(() => setMounted(true), []);
+
+  const isDark = mounted && resolvedTheme === "dark";
 
   return (
     <ClerkProvider
       appearance={{
-        baseTheme: resolvedTheme === "dark" ? darkTheme : undefined,
+        baseTheme: isDark ? darkTheme : undefined,
         variables: {
-          colorPrimary: resolvedTheme === "dark" ? "#f06a42" : "#d1451f",
+          colorPrimary: isDark ? "#f06a42" : "#d1451f",
           borderRadius: "0.625rem",
         },
         elements: {
