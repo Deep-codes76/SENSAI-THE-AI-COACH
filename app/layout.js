@@ -8,6 +8,7 @@ import Footer from "@/components/footer";
 import { ThemeProvider } from "@/components/theme-provider";
 import ClerkThemeProvider from "@/components/clerk-theme-provider";
 import { DEMO_MODE } from "@/lib/demo";
+import { getSiteUrl } from "@/lib/site-url";
 
 import "./globals.css";
 
@@ -30,7 +31,7 @@ const mono = JetBrains_Mono({
   display: "swap",
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+const siteUrl = getSiteUrl();
 
 export const metadata = {
   metadataBase: new URL(siteUrl),

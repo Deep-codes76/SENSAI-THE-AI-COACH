@@ -62,7 +62,7 @@ npm run dev
 | `CLERK_SECRET_KEY` | yes | Clerk server key |
 | `GEMINI_API_KEY` | yes | Google Gemini |
 | `GEMINI_MODEL` | no | Defaults to `gemini-3.5-flash` |
-| `NEXT_PUBLIC_SITE_URL` | no | Absolute URL for Open Graph tags |
+| `NEXT_PUBLIC_SITE_URL` | no | Absolute URL for Open Graph tags; auto-detected on Render and Vercel |
 | `NEXT_PUBLIC_DEMO_MODE` | no | `1` runs against fixtures |
 
 ## Architecture
@@ -148,7 +148,11 @@ supply the five secrets it prompts for:
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk → API keys |
 | `CLERK_SECRET_KEY` | Clerk → API keys |
 | `GEMINI_API_KEY` | Google AI Studio |
-| `NEXT_PUBLIC_SITE_URL` | The Render URL, e.g. `https://sensai.onrender.com` |
+
+`NEXT_PUBLIC_SITE_URL` is not among them: the app falls back to
+`RENDER_EXTERNAL_URL`, which Render sets to the service's own public URL (and
+to `VERCEL_URL` on Vercel). Set it explicitly only when serving from a custom
+domain.
 
 To configure it by hand instead, create a **Web Service** with:
 

@@ -43,8 +43,10 @@ services:
       # Render exposes environment variables during the build.
       - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
         sync: false
-      - key: NEXT_PUBLIC_SITE_URL
-        sync: false
+
+      # NEXT_PUBLIC_SITE_URL is deliberately absent: the app falls back to
+      # RENDER_EXTERNAL_URL, which Render sets to this service's public URL.
+      # Set it explicitly only when serving from a custom domain.
 
       - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
         value: /sign-in
