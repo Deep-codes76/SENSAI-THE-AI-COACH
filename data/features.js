@@ -1,4 +1,11 @@
-import { BrainCircuit, FileCheck2, LineChart, ScrollText } from "lucide-react";
+import {
+  BrainCircuit,
+  Briefcase,
+  FileCheck2,
+  LineChart,
+  PenLine,
+  ScrollText,
+} from "lucide-react";
 
 /**
  * Icons are stored as components, not rendered elements, so the consuming
@@ -31,7 +38,21 @@ export const features = [
     icon: BrainCircuit,
     title: "Mock interviews",
     description:
-      "Ten role-specific questions at a time, with explanations, a scored history and a tip generated from what you got wrong.",
+      "Technical, system design or behavioural rounds — ten questions at a time, with explanations and a scored history.",
     href: "/interview",
+  },
+  {
+    icon: PenLine,
+    title: "Cover letters",
+    description:
+      "A tailored draft per posting, written from your profile and the job description, editable in markdown.",
+    href: "/ai-cover-letter",
+  },
+  {
+    icon: Briefcase,
+    title: "Application tracker",
+    description:
+      "A pipeline board from saved to offer, with your notes, the posting link and a response rate that only counts what you actually sent.",
+    href: "/applications",
   },
 ];

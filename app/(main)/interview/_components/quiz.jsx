@@ -15,6 +15,10 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { generateQuiz, saveQuizResult } from "@/actions/interview";
+import {
+  CATEGORY_KEYS,
+  QUIZ_CATEGORIES,
+} from "@/app/lib/interview-categories";
 import useFetch from "@/hooks/use-fetch";
 
 import QuizResult from "./quiz-result";
@@ -23,6 +27,7 @@ export default function Quiz() {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState([]);
   const [showExplanation, setShowExplanation] = useState(false);
+  const [category, setCategory] = useState("technical");
 
   const {
     loading: generatingQuiz,
@@ -72,7 +77,12 @@ export default function Quiz() {
      * checked: when the save fails the user stays on the quiz with their
      * answers intact rather than landing on a blank screen.
      */
-    const saved = await saveQuizResultFn(quizData, answers, calculateScore());
+    const saved = await saveQuizResultFn(
+      quizData,
+      answers,
+      calculateScore(),
+      category
+    );
     if (saved) toast.success("Quiz complete.");
   };
 
@@ -82,7 +92,7 @@ export default function Quiz() {
     setShowExplanation(false);
     setResultData(null);
     setQuizData(undefined);
-    generateQuizFn();
+    generateQuizFn(category);
   };
 
   if (resultData) {
@@ -111,16 +121,44 @@ export default function Quiz() {
         <CardHeader>
           <CardTitle>Ready to test your knowledge?</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-5">
           <p className="text-muted-foreground">
             Ten multiple-choice questions specific to your industry and skills.
             You can reveal an explanation for each one after answering, and your
             score is saved to your performance history.
           </p>
+
+          <div className="space-y-3">
+            <p className="section-label">Pick a round</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {CATEGORY_KEYS.map((key) => {
+                const option = QUIZ_CATEGORIES[key];
+                const selected = category === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setCategory(key)}
+                    className={`rounded-lg border p-4 text-left transition-colors ${
+                      selected
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-muted/60"
+                    }`}
+                  >
+                    <span className="block font-medium">{option.label}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {option.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </CardContent>
         <CardFooter>
-          <Button onClick={generateQuizFn} className="w-full">
-            Start quiz
+          <Button onClick={() => generateQuizFn(category)} className="w-full">
+            Start {QUIZ_CATEGORIES[category].label.toLowerCase()} quiz
           </Button>
         </CardFooter>
       </Card>
@@ -137,7 +175,8 @@ export default function Quiz() {
       <CardHeader className="space-y-4">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-medium text-muted-foreground">
-            Question {currentQuestion + 1} of {quizData.length}
+            {QUIZ_CATEGORIES[category].label} · question {currentQuestion + 1} of{" "}
+            {quizData.length}
           </CardTitle>
           <span className="numeric text-xs text-muted-foreground">
             {answers.filter(Boolean).length} answered

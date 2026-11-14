@@ -45,11 +45,11 @@ export default function LandingPage() {
           <SectionHeading
             index="01"
             label="What it does"
-            title="Four tools, one profile."
+            title="Six tools, one profile."
             description="Onboarding happens once. Every tool below reads the same industry, experience and skills, so nothing has to be re-explained."
           />
 
-          <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2">
+          <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
             {features.map((feature, index) => (
               <Reveal key={feature.title} delay={index * 70}>
                 <Link

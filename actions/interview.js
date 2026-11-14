@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { generateJson, generateText } from "@/lib/ai";
+import { getCategory } from "@/app/lib/interview-categories";
 import {
   DEMO_MODE,
   demoAssessments,
@@ -27,7 +28,9 @@ const quizSchema = z.object({
     .min(1),
 });
 
-export async function generateQuiz() {
+export async function generateQuiz(categoryKey = "technical") {
+  const category = getCategory(categoryKey);
+
   if (DEMO_MODE) {
     await demoDelay(1100);
     return demoQuiz;
@@ -40,9 +43,11 @@ export async function generateQuiz() {
   }
 
   const prompt = `
-Generate ${QUESTION_COUNT} technical interview questions for a ${user.industry} professional${
+Generate ${QUESTION_COUNT} ${category.label} interview questions for a ${user.industry} professional${
     user.skills?.length ? ` with expertise in ${user.skills.join(", ")}` : ""
   }.
+
+${category.instruction}
 
 Each question is multiple choice with exactly 4 distinct options.
 
@@ -101,13 +106,15 @@ Rules:
   }
 }
 
-export async function saveQuizResult(questions, answers, score) {
+export async function saveQuizResult(questions, answers, score, categoryKey = "technical") {
+  const category = getCategory(categoryKey);
+
   if (DEMO_MODE) {
     await demoDelay(700);
     return {
       id: "demo-result",
       quizScore: score,
-      category: "Technical",
+      category: category.label,
       createdAt: new Date(),
       improvementTip:
         "Demo mode: in the live app this tip is generated from the questions you got wrong.",
@@ -148,7 +155,7 @@ export async function saveQuizResult(questions, answers, score) {
 
     try {
       improvementTip = await generateText(`
-The user got the following ${user.industry} technical interview questions wrong:
+The user got the following ${user.industry} ${category.label} interview questions wrong:
 
 ${wrongQuestionsText}
 
@@ -170,7 +177,7 @@ Do not mention the mistakes explicitly; focus on what to learn or practise.
         userId: user.id,
         quizScore: score,
         questions: questionResults,
-        category: "Technical",
+        category: category.label,
         improvementTip,
       },
     });

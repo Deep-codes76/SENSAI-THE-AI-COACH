@@ -12,13 +12,16 @@
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "dev:demo": "NEXT_PUBLIC_DEMO_MODE=1 next dev",
-    "build:demo": "NEXT_PUBLIC_DEMO_MODE=1 next build"
+    "build:demo": "NEXT_PUBLIC_DEMO_MODE=1 next build",
+    "test:integration": "vitest run --config vitest.integration.config.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.9.10",
     "@clerk/themes": "^2.2.5",
     "@google/generative-ai": "^0.21.0",
     "@hookform/resolvers": "^3.10.0",
+    "@neondatabase/serverless": "^0.10.4",
+    "@prisma/adapter-neon": "^6.19.3",
     "@prisma/client": "^6.12.0",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
@@ -33,6 +36,7 @@
     "@uiw/react-md-editor": "^4.0.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cmdk": "^1.0.4",
     "date-fns": "^4.1.0",
     "html2pdf.js": "^0.10.2",
     "inngest": "^3.54.0",
@@ -48,6 +52,7 @@
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "ws": "^8.23.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

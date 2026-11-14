@@ -68,7 +68,14 @@ export default function QuizList({ assessments = [] }) {
                   className="w-full rounded-lg border border-border p-4 text-left transition-colors hover:border-primary/40 hover:bg-muted/50"
                 >
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="font-medium">Quiz {total - i}</span>
+                    <span className="font-medium">
+                      Quiz {total - i}
+                      {assessment.category && (
+                        <span className="ml-2 rounded-full bg-muted px-2 py-0.5 font-mono text-[0.65rem] uppercase tracking-widest text-muted-foreground">
+                          {assessment.category}
+                        </span>
+                      )}
+                    </span>
                     <span className="numeric text-xs text-muted-foreground">
                       {format(new Date(assessment.createdAt), "d MMM yyyy, HH:mm")}
                     </span>

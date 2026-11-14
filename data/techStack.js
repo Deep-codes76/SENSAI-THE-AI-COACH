@@ -17,9 +17,9 @@ export const techStack = [
 
 export const capabilities = [
   {
-    value: "4",
-    label: "AI tools",
-    detail: "Insights, resume, cover letters, interviews",
+    value: "6",
+    label: "Tools",
+    detail: "Insights, resume, ATS, letters, interviews, tracker",
   },
   {
     value: "50+",
@@ -27,9 +27,9 @@ export const capabilities = [
     detail: "Each with its own generated market profile",
   },
   {
-    value: "10",
-    label: "Questions per mock",
-    detail: "Scored, explained and tracked over time",
+    value: "3",
+    label: "Interview rounds",
+    detail: "Technical, system design and behavioural",
   },
   {
     value: "Weekly",
