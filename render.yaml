@@ -1,0 +1,56 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploy with: Render dashboard → New → Blueprint → pick this repository.
+# Render reads this file and creates the service; you supply the secrets it
+# prompts for (everything marked `sync: false`).
+
+services:
+  - type: web
+    name: sensai
+    runtime: node
+    plan: free
+    region: oregon
+    branch: master
+
+    # Migrations run here rather than in a preDeployCommand, because
+    # preDeployCommand requires a paid compute plan. `migrate deploy` is
+    # idempotent, so running it on every deploy is safe.
+    #
+    # `npm ci` triggers the postinstall hook, which runs `prisma generate`.
+    buildCommand: npm ci && npx prisma migrate deploy && npm run build
+
+    # `next start` already binds 0.0.0.0 and reads Render's PORT, so no flags
+    # are needed here.
+    startCommand: npm start
+
+    healthCheckPath: /
+
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+
+      # Secrets. Render prompts for each of these when the Blueprint is
+      # applied; nothing sensitive is committed.
+      - key: DATABASE_URL
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+      # NEXT_PUBLIC_* values are inlined into the client bundle at build time,
+      # so they must exist before `npm run build` runs — which they do, since
+      # Render exposes environment variables during the build.
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
+
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
+        value: /sign-in
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_URL
+        value: /sign-up
+      - key: NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL
+        value: /onboarding
+      - key: NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL
+        value: /onboarding
