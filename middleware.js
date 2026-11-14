@@ -1,6 +1,8 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
+import { DEMO_MODE } from "@/lib/demo";
+
 const isProtectedRoute = createRouteMatcher([
   "/dashboard(.*)",
   "/resume(.*)",
@@ -9,37 +11,30 @@ const isProtectedRoute = createRouteMatcher([
   "/onboarding(.*)",
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
-  const { userId } = await auth();
+const passthrough = () => NextResponse.next();
 
-  if (!userId && isProtectedRoute(req)) {
-    const { redirectToSignIn } = await auth();
-    return redirectToSignIn();
+// In demo mode there is no Clerk instance to talk to, so the auth middleware
+// is skipped rather than left to fail its handshake on every request.
+export default DEMO_MODE
+  ? passthrough
+  : clerkMiddleware(async (auth, req) => {
+  if (!isProtectedRoute(req)) return NextResponse.next();
+
+  const { userId, redirectToSignIn } = await auth();
+
+  if (!userId) {
+    // Send the user back where they were trying to go once they sign in.
+    return redirectToSignIn({ returnBackUrl: req.url });
   }
 
   return NextResponse.next();
-});
+    });
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and all static files, unless found in search params
+    // Skip Next.js internals and static files unless referenced in a query.
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    // Always run for API routes
+    // Always run for API routes.
     "/(api|trpc)(.*)",
   ],
 };
-
-
-
-// import { clerkMiddleware } from '@clerk/nextjs/server';
-
-// export default clerkMiddleware();
-
-// export const config = {
-//   matcher: [
-//     // Skip Next.js internals and all static files, unless found in search params
-//     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-//     // Always run for API routes
-//     '/(api|trpc)(.*)',
-//   ],
-// };

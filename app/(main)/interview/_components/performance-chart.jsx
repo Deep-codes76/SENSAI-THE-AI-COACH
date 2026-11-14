@@ -1,14 +1,17 @@
 "use client";
 
+import { useMemo } from "react";
 import {
-  LineChart,
+  CartesianGrid,
   Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
 } from "recharts";
+import { format } from "date-fns";
+
 import {
   Card,
   CardContent,
@@ -16,63 +19,83 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useEffect, useState } from "react";
-import { format } from "date-fns";
 
-export default function PerformanceChart({ assessments }) {
-  const [chartData, setChartData] = useState([]);
-
-  useEffect(() => {
-    if (assessments) {
-      const formattedData = assessments.map((assessment) => ({
-        date: format(new Date(assessment.createdAt), "MMM dd"),
+export default function PerformanceChart({ assessments = [] }) {
+  /*
+   * Derived with useMemo rather than copied into state by an effect: the
+   * original version rendered an empty chart on first paint and only filled in
+   * after a second render.
+   *
+   * Assessments arrive newest-first, so they are reversed here — otherwise the
+   * "trend" line ran backwards through time.
+   */
+  const chartData = useMemo(
+    () =>
+      [...assessments].reverse().map((assessment) => ({
+        date: format(new Date(assessment.createdAt), "d MMM"),
         score: assessment.quizScore,
-      }));
-      setChartData(formattedData);
-    }
-  }, [assessments]);
+      })),
+    [assessments]
+  );
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="gradient-title text-3xl md:text-4xl">
-          Performance Trend
-        </CardTitle>
+        <CardTitle className="text-xl">Performance trend</CardTitle>
         <CardDescription>Your quiz scores over time</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis domain={[0, 100]} />
-              <Tooltip
-                content={({ active, payload }) => {
-                  if (active && payload?.length) {
-                    return (
-                      <div className="bg-background border rounded-lg p-2 shadow-md">
-                        <p className="text-sm font-medium">
-                          Score: {payload[0].value}%
+        {chartData.length === 0 ? (
+          <p className="py-16 text-center text-sm text-muted-foreground">
+            Take your first mock interview and your scores will appear here.
+          </p>
+        ) : (
+          <div className="h-[280px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 8, right: 12, left: -20 }}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="hsl(var(--border))"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  stroke="hsl(var(--border))"
+                />
+                <YAxis
+                  domain={[0, 100]}
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  stroke="hsl(var(--border))"
+                  tickFormatter={(v) => `${v}%`}
+                />
+                <Tooltip
+                  cursor={{ stroke: "hsl(var(--border))" }}
+                  content={({ active, payload }) =>
+                    active && payload?.length ? (
+                      <div className="rounded-lg border border-border bg-popover p-3 shadow-lg">
+                        <p className="numeric text-sm font-medium">
+                          {payload[0].value}%
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {payload[0].payload.date}
                         </p>
                       </div>
-                    );
+                    ) : null
                   }
-                  return null;
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="score"
-                stroke="hsl(var(--primary))"
-                strokeWidth={2}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+                />
+                <Line
+                  type="monotone"
+                  dataKey="score"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: "hsl(var(--primary))" }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

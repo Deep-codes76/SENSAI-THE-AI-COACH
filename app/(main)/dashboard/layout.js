@@ -1,17 +1,19 @@
-import { BarLoader } from "react-spinners";
 import { Suspense } from "react";
+
+import { PageHeader } from "@/components/page-header";
+import { DashboardSkeleton } from "@/components/skeletons";
+
+export const metadata = { title: "Industry Insights" };
 
 export default function Layout({ children }) {
   return (
-    <div className="px-5">
-      <div className="flex items-center justify-between mb-5">
-        <h1 className="text-6xl font-bold gradient-title">Industry Insights</h1>
-      </div>
-      <Suspense
-        fallback={<BarLoader className="mt-4" width={"100%"} color="gray" />}
-      >
-        {children}
-      </Suspense>
+    <div>
+      <PageHeader
+        eyebrow="Market"
+        title="Industry Insights"
+        description="Salary bands, demand and trends for your field, regenerated weekly."
+      />
+      <Suspense fallback={<DashboardSkeleton />}>{children}</Suspense>
     </div>
   );
 }
