@@ -10,19 +10,32 @@ export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
-  // The server has no idea which theme the browser resolved to, so the icon
-  // is only rendered once mounted; otherwise React reports a mismatch.
+  /*
+   * The server cannot know which theme the browser resolved to, so *every*
+   * themed attribute has to wait for mount — not just the icon.
+   *
+   * Guarding only the icon still produced a hydration mismatch, because the
+   * server rendered aria-label="Switch to dark theme" (resolvedTheme is
+   * undefined there) while the client rendered "Switch to light theme".
+   */
   useEffect(() => setMounted(true), []);
 
-  const isDark = resolvedTheme === "dark";
+  const isDark = mounted && resolvedTheme === "dark";
 
   return (
     <Button
       variant="ghost"
       size="icon"
-      aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
-      onClick={() => setTheme(isDark ? "light" : "dark")}
       className="h-9 w-9"
+      // Neutral until the theme is known, so server and client agree.
+      aria-label={
+        mounted
+          ? isDark
+            ? "Switch to light theme"
+            : "Switch to dark theme"
+          : "Toggle theme"
+      }
+      onClick={() => setTheme(isDark ? "light" : "dark")}
     >
       {mounted ? (
         isDark ? (
@@ -31,7 +44,7 @@ export function ThemeToggle() {
           <Moon className="h-4 w-4" />
         )
       ) : (
-        <span className="h-4 w-4" />
+        <span className="h-4 w-4" aria-hidden="true" />
       )}
     </Button>
   );
