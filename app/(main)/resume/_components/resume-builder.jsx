@@ -1,35 +1,57 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertTriangle,
   Download,
   Edit,
+  Gauge,
   Loader2,
   Monitor,
   Save,
 } from "lucide-react";
 import { toast } from "sonner";
-import MDEditor from "@uiw/react-md-editor";
+
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { saveResume } from "@/actions/resume";
-import { EntryForm } from "./entry-form";
-import useFetch from "@/hooks/use-fetch";
-import { useUser } from "@clerk/nextjs";
+import { Label } from "@/components/ui/label";
+import { PageHeader } from "@/components/page-header";
+import { PrintSurface } from "@/components/print-surface";
+import { EditorSkeleton } from "@/components/skeletons";
+import { analyzeResume, saveResume } from "@/actions/resume";
 import { entriesToMarkdown, parseMarkdownToForm } from "@/app/lib/helper";
 import { resumeSchema } from "@/app/lib/schema";
-import html2pdf from "html2pdf.js/dist/html2pdf.min.js";
+import { exportElementToPdf } from "@/lib/pdf";
+import useFetch from "@/hooks/use-fetch";
 
-export default function ResumeBuilder({ initialContent }) {
-  const [activeTab, setActiveTab] = useState("edit");
-  const [previewContent, setPreviewContent] = useState(initialContent);
-  const { user } = useUser();
-  const [resumeMode, setResumeMode] = useState("preview");
+import { EntryForm } from "./entry-form";
+import AtsPanel from "./ats-panel";
+
+// The markdown editor is ~500 kB and is never needed for first paint.
+const MDEditor = dynamic(() => import("@uiw/react-md-editor"), {
+  ssr: false,
+  loading: () => <EditorSkeleton />,
+});
+
+const MDPreview = dynamic(
+  () => import("@uiw/react-md-editor").then((m) => m.default.Markdown),
+  { ssr: false }
+);
+
+export default function ResumeBuilder({ initialContent, userName, initialAtsScore }) {
+  const [activeTab, setActiveTab] = useState(initialContent ? "markdown" : "form");
+  const [markdown, setMarkdown] = useState(initialContent ?? "");
+  const [editorMode, setEditorMode] = useState("preview");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [atsResult, setAtsResult] = useState(null);
+  // True once the user has hand-edited the markdown, so regenerating from the
+  // form can warn before discarding their edits.
+  const markdownDirty = useRef(false);
 
   const {
     control,
@@ -41,7 +63,7 @@ export default function ResumeBuilder({ initialContent }) {
   } = useForm({
     resolver: zodResolver(resumeSchema),
     defaultValues: {
-      contactInfo: {},
+      contactInfo: { email: "", mobile: "", linkedin: "", twitter: "" },
       summary: "",
       skills: "",
       experience: [],
@@ -50,63 +72,37 @@ export default function ResumeBuilder({ initialContent }) {
     },
   });
 
-  const {
-    loading: isSaving,
-    fn: saveResumeFn,
-    data: saveResult,
-    error: saveError,
-  } = useFetch(saveResume);
-
-  // Watch form fields for preview updates
-  const formValues = watch();
+  const { loading: isSaving, fn: saveResumeFn } = useFetch(saveResume);
+  const { loading: isAnalyzing, fn: analyzeResumeFn } = useFetch(analyzeResume);
 
   useEffect(() => {
-    if (initialContent) {
-      setActiveTab("preview");
-      const parsedValues = parseMarkdownToForm(initialContent);
-      if (parsedValues) {
-        reset(parsedValues);
-      }
-    }
+    if (!initialContent) return;
+    const parsed = parseMarkdownToForm(initialContent);
+    if (parsed) reset(parsed);
   }, [initialContent, reset]);
 
-  // Update preview content when form values change
-  useEffect(() => {
-    if (activeTab === "edit") {
-      const newContent = getCombinedContent();
-      setPreviewContent(newContent ? newContent : initialContent);
-    }
-  }, [formValues, activeTab]);
+  const formValues = watch();
 
-  // Handle save result
-  useEffect(() => {
-    if (saveResult && !isSaving) {
-      toast.success("Resume saved successfully!");
-    }
-    if (saveError) {
-      toast.error(saveError.message || "Failed to save resume");
-    }
-  }, [saveResult, saveError, isSaving]);
+  const buildMarkdown = useCallback(() => {
+    const { contactInfo, summary, skills, experience, education, projects } =
+      formValues;
 
-  const getContactMarkdown = () => {
-    const { contactInfo } = formValues;
-    const parts = [];
-    if (contactInfo.email) parts.push(`📧 ${contactInfo.email}`);
-    if (contactInfo.mobile) parts.push(`📱 ${contactInfo.mobile}`);
-    if (contactInfo.linkedin)
-      parts.push(`💼 [LinkedIn](${contactInfo.linkedin})`);
-    if (contactInfo.twitter) parts.push(`🐦 [Twitter](${contactInfo.twitter})`);
+    const contactParts = [];
+    if (contactInfo?.email) contactParts.push(`📧 ${contactInfo.email}`);
+    if (contactInfo?.mobile) contactParts.push(`📱 ${contactInfo.mobile}`);
+    if (contactInfo?.linkedin)
+      contactParts.push(`💼 [LinkedIn](${contactInfo.linkedin})`);
+    if (contactInfo?.twitter)
+      contactParts.push(`🐦 [Twitter](${contactInfo.twitter})`);
 
-    return parts.length > 0
-      ? `## <div align="center">${user.fullName}</div>
-        \n\n<div align="center">\n\n${parts.join(" | ")}\n\n</div>`
+    const header = contactParts.length
+      ? `## <div align="center">${userName || "Your Name"}</div>\n\n<div align="center">\n\n${contactParts.join(
+          " | "
+        )}\n\n</div>`
       : "";
-  };
 
-  const getCombinedContent = () => {
-    const { summary, skills, experience, education, projects } = formValues;
     return [
-      getContactMarkdown(),
+      header,
       summary && `## Professional Summary\n\n${summary}`,
       skills && `## Skills\n\n${skills}`,
       entriesToMarkdown(experience, "Work Experience"),
@@ -115,312 +111,331 @@ export default function ResumeBuilder({ initialContent }) {
     ]
       .filter(Boolean)
       .join("\n\n");
+  }, [formValues, userName]);
+
+  const generatedMarkdown = useMemo(() => buildMarkdown(), [buildMarkdown]);
+
+  const syncFromForm = () => {
+    if (markdownDirty.current && markdown.trim() && markdown !== generatedMarkdown) {
+      const ok = window.confirm(
+        "Regenerating from the form will replace your hand-edited markdown. Continue?"
+      );
+      if (!ok) return;
+    }
+    setMarkdown(generatedMarkdown);
+    markdownDirty.current = false;
+    setActiveTab("markdown");
+    toast.success("Markdown regenerated from the form.");
   };
 
-  const [isGenerating, setIsGenerating] = useState(false);
+  /*
+   * Save used to be wrapped in `handleSubmit`, so whenever the form was
+   * incomplete validation failed silently and the button simply did nothing.
+   * Saving the markdown does not need the form to be valid, so it no longer
+   * goes through the resolver; the form tab reports its own errors.
+   */
+  const handleSave = async () => {
+    const content = (markdown || generatedMarkdown).trim();
+
+    if (!content) {
+      toast.error("Add some content before saving.");
+      return;
+    }
+
+    const saved = await saveResumeFn(content);
+    if (saved) toast.success("Resume saved.");
+  };
+
+  const handleAnalyze = async () => {
+    const content = (markdown || generatedMarkdown).trim();
+
+    if (content.length < 50) {
+      toast.error("Add more content before running an ATS check.");
+      return;
+    }
+
+    const result = await analyzeResumeFn(content);
+    if (result) {
+      setAtsResult(result);
+      toast.success(`ATS score: ${result.score}/100`);
+    }
+  };
 
   const generatePDF = async () => {
     setIsGenerating(true);
     try {
-      const element = document.getElementById("resume-pdf");
-      const opt = {
-        margin: [15, 15],
+      await exportElementToPdf(document.getElementById("resume-pdf"), {
         filename: "resume.pdf",
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      };
-
-      await html2pdf().set(opt).from(element).save();
+      });
+      toast.success("PDF downloaded.");
     } catch (error) {
       console.error("PDF generation error:", error);
+      toast.error(error.message || "Failed to generate the PDF");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const onSubmit = async (data) => {
-    try {
-      const formattedContent = previewContent
-        .replace(/\n/g, "\n") // Normalize newlines
-        .replace(/\n\s*\n/g, "\n\n") // Normalize multiple newlines to double newlines
-        .trim();
+  const previewSource = markdown || generatedMarkdown;
 
-      console.log(previewContent, formattedContent);
-      await saveResumeFn(previewContent);
-    } catch (error) {
-      console.error("Save error:", error);
-    }
-  };
+  const onInvalid = () =>
+    toast.error("Some fields still need attention — check the form tab.");
 
   return (
-    <div data-color-mode="light" className="space-y-4">
-      <div className="flex flex-col md:flex-row justify-between items-center gap-2">
-        <h1 className="font-bold gradient-title text-5xl md:text-6xl">
-          Resume Builder
-        </h1>
-        <div className="space-x-2">
-          <Button
-            variant="destructive"
-            onClick={handleSubmit(onSubmit)}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4" />
-                Save
-              </>
-            )}
-          </Button>
-          <Button onClick={generatePDF} disabled={isGenerating}>
-            {isGenerating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Generating PDF...
-              </>
-            ) : (
-              <>
-                <Download className="h-4 w-4" />
-                Download PDF
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Documents"
+        title="Resume Builder"
+        description="Fill in the form or write markdown directly. Both stay in sync, and either can be exported."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={handleAnalyze}
+              disabled={isAnalyzing}
+            >
+              {isAnalyzing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Scoring…
+                </>
+              ) : (
+                <>
+                  <Gauge className="mr-2 h-4 w-4" />
+                  ATS check
+                </>
+              )}
+            </Button>
+            <Button variant="outline" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save
+                </>
+              )}
+            </Button>
+            <Button onClick={generatePDF} disabled={isGenerating}>
+              {isGenerating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Exporting…
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  PDF
+                </>
+              )}
+            </Button>
+          </>
+        }
+      />
+
+      <AtsPanel
+        result={atsResult}
+        initialScore={initialAtsScore}
+        loading={isAnalyzing}
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="edit">Form</TabsTrigger>
-          <TabsTrigger value="preview">Markdown</TabsTrigger>
-        </TabsList>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList>
+            <TabsTrigger value="form">Form</TabsTrigger>
+            <TabsTrigger value="markdown">Markdown</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="edit">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-            {/* Contact Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Contact Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border rounded-lg bg-muted/50">
+          {activeTab === "form" ? (
+            <Button variant="link" size="sm" onClick={syncFromForm}>
+              Generate markdown →
+            </Button>
+          ) : (
+            <Button
+              variant="link"
+              size="sm"
+              onClick={() =>
+                setEditorMode(editorMode === "preview" ? "edit" : "preview")
+              }
+            >
+              {editorMode === "preview" ? (
+                <>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit markdown
+                </>
+              ) : (
+                <>
+                  <Monitor className="mr-2 h-4 w-4" />
+                  Show preview
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+
+        <TabsContent value="form" className="mt-6">
+          <form
+            onSubmit={handleSubmit(syncFromForm, onInvalid)}
+            className="space-y-10"
+          >
+            <section className="space-y-4">
+              <h2 className="text-lg font-medium">Contact information</h2>
+              <div className="grid gap-4 rounded-lg border border-border bg-muted/30 p-5 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Email</label>
+                  <Label htmlFor="email">Email</Label>
                   <Input
-                    {...register("contactInfo.email")}
+                    id="email"
                     type="email"
-                    placeholder="your@email.com"
-                    error={errors.contactInfo?.email}
+                    placeholder="you@example.com"
+                    {...register("contactInfo.email")}
                   />
                   {errors.contactInfo?.email && (
-                    <p className="text-sm text-red-500">
+                    <p className="text-sm text-destructive">
                       {errors.contactInfo.email.message}
                     </p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Mobile Number</label>
+                  <Label htmlFor="mobile">Mobile</Label>
                   <Input
-                    {...register("contactInfo.mobile")}
+                    id="mobile"
                     type="tel"
-                    placeholder="+1 234 567 8900"
+                    placeholder="+91 98765 43210"
+                    {...register("contactInfo.mobile")}
                   />
-                  {errors.contactInfo?.mobile && (
-                    <p className="text-sm text-red-500">
-                      {errors.contactInfo.mobile.message}
-                    </p>
-                  )}
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">LinkedIn URL</label>
+                  <Label htmlFor="linkedin">LinkedIn</Label>
                   <Input
-                    {...register("contactInfo.linkedin")}
+                    id="linkedin"
                     type="url"
-                    placeholder="https://linkedin.com/in/your-profile"
+                    placeholder="https://linkedin.com/in/you"
+                    {...register("contactInfo.linkedin")}
                   />
                   {errors.contactInfo?.linkedin && (
-                    <p className="text-sm text-red-500">
+                    <p className="text-sm text-destructive">
                       {errors.contactInfo.linkedin.message}
                     </p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    Twitter/X Profile
-                  </label>
+                  <Label htmlFor="twitter">Twitter / X</Label>
                   <Input
-                    {...register("contactInfo.twitter")}
+                    id="twitter"
                     type="url"
-                    placeholder="https://twitter.com/your-handle"
+                    placeholder="https://x.com/you"
+                    {...register("contactInfo.twitter")}
                   />
                   {errors.contactInfo?.twitter && (
-                    <p className="text-sm text-red-500">
+                    <p className="text-sm text-destructive">
                       {errors.contactInfo.twitter.message}
                     </p>
                   )}
                 </div>
               </div>
-            </div>
+            </section>
 
-            {/* Summary */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Professional Summary</h3>
+            <section className="space-y-3">
+              <h2 className="text-lg font-medium">Professional summary</h2>
               <Controller
                 name="summary"
                 control={control}
                 render={({ field }) => (
                   <Textarea
                     {...field}
-                    className="h-32"
-                    placeholder="Write a compelling professional summary..."
-                    error={errors.summary}
+                    className="h-28"
+                    placeholder="Two or three sentences on what you build and the impact you have had."
                   />
                 )}
               />
               {errors.summary && (
-                <p className="text-sm text-red-500">{errors.summary.message}</p>
+                <p className="text-sm text-destructive">
+                  {errors.summary.message}
+                </p>
               )}
-            </div>
+            </section>
 
-            {/* Skills */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Skills</h3>
+            <section className="space-y-3">
+              <h2 className="text-lg font-medium">Skills</h2>
               <Controller
                 name="skills"
                 control={control}
                 render={({ field }) => (
                   <Textarea
                     {...field}
-                    className="h-32"
-                    placeholder="List your key skills..."
-                    error={errors.skills}
+                    className="h-24"
+                    placeholder="TypeScript, React, PostgreSQL, AWS…"
                   />
                 )}
               />
               {errors.skills && (
-                <p className="text-sm text-red-500">{errors.skills.message}</p>
-              )}
-            </div>
-
-            {/* Experience */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Work Experience</h3>
-              <Controller
-                name="experience"
-                control={control}
-                render={({ field }) => (
-                  <EntryForm
-                    type="Experience"
-                    entries={field.value}
-                    onChange={field.onChange}
-                  />
-                )}
-              />
-              {errors.experience && (
-                <p className="text-sm text-red-500">
-                  {errors.experience.message}
+                <p className="text-sm text-destructive">
+                  {errors.skills.message}
                 </p>
               )}
-            </div>
+            </section>
 
-            {/* Education */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Education</h3>
-              <Controller
-                name="education"
-                control={control}
-                render={({ field }) => (
-                  <EntryForm
-                    type="Education"
-                    entries={field.value}
-                    onChange={field.onChange}
-                  />
-                )}
-              />
-              {errors.education && (
-                <p className="text-sm text-red-500">
-                  {errors.education.message}
-                </p>
-              )}
-            </div>
-
-            {/* Projects */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Projects</h3>
-              <Controller
-                name="projects"
-                control={control}
-                render={({ field }) => (
-                  <EntryForm
-                    type="Project"
-                    entries={field.value}
-                    onChange={field.onChange}
-                  />
-                )}
-              />
-              {errors.projects && (
-                <p className="text-sm text-red-500">
-                  {errors.projects.message}
-                </p>
-              )}
-            </div>
+            {[
+              { name: "experience", label: "Work Experience", type: "Experience" },
+              { name: "education", label: "Education", type: "Education" },
+              { name: "projects", label: "Projects", type: "Project" },
+            ].map((section) => (
+              <section key={section.name} className="space-y-3">
+                <h2 className="text-lg font-medium">{section.label}</h2>
+                <Controller
+                  name={section.name}
+                  control={control}
+                  render={({ field }) => (
+                    <EntryForm
+                      type={section.type}
+                      entries={field.value ?? []}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
+              </section>
+            ))}
           </form>
         </TabsContent>
 
-        <TabsContent value="preview">
-          {activeTab === "preview" && (
-            <Button
-              variant="link"
-              type="button"
-              className="mb-2"
-              onClick={() =>
-                setResumeMode(resumeMode === "preview" ? "edit" : "preview")
-              }
-            >
-              {resumeMode === "preview" ? (
-                <>
-                  <Edit className="h-4 w-4" />
-                  Edit Resume
-                </>
-              ) : (
-                <>
-                  <Monitor className="h-4 w-4" />
-                  Show Preview
-                </>
-              )}
-            </Button>
-          )}
-
-          {activeTab === "preview" && resumeMode !== "preview" && (
-            <div className="flex p-3 gap-2 items-center border-2 border-yellow-600 text-yellow-600 rounded mb-2">
-              <AlertTriangle className="h-5 w-5" />
+        <TabsContent value="markdown" className="mt-6">
+          {editorMode === "edit" && (
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-warning/50 bg-warning/10 p-3 text-warning">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
               <span className="text-sm">
-                You will lose editied markdown if you update the form data.
+                Edits here are replaced if you regenerate from the form.
               </span>
             </div>
           )}
-          <div className="border rounded-lg">
+
+          <div className="overflow-hidden rounded-lg border border-border" data-color-mode="light">
             <MDEditor
-              value={previewContent}
-              onChange={setPreviewContent}
-              height={800}
-              preview={resumeMode}
+              value={previewSource}
+              onChange={(value) => {
+                markdownDirty.current = true;
+                setMarkdown(value ?? "");
+              }}
+              height={760}
+              preview={editorMode}
             />
-          </div>
-          <div className="hidden">
-            <div id="resume-pdf">
-              <MDEditor.Markdown
-                source={previewContent}
-                style={{
-                  background: "white",
-                  color: "black",
-                }}
-              />
-            </div>
           </div>
         </TabsContent>
       </Tabs>
+
+      {/*
+        Rendered off-screen rather than inside a `.hidden` wrapper, and kept
+        outside the Tabs so it exists no matter which tab is active — the old
+        version produced a blank PDF, or none at all from the form tab.
+      */}
+      <PrintSurface id="resume-pdf">
+        <MDPreview
+          source={previewSource}
+          style={{ background: "#ffffff", color: "#111111" }}
+        />
+      </PrintSurface>
     </div>
   );
 }

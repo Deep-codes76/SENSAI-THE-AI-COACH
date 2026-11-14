@@ -1,88 +1,97 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import MDEditor from "@uiw/react-md-editor";
-import { Button } from "@/components/ui/button";
-import { Download, Edit, Save, Copy, Check, Loader2, Monitor } from "lucide-react";
+import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import { Check, Copy, Download, Edit, Loader2, Monitor, Save } from "lucide-react";
 import { toast } from "sonner";
-import { updateCoverLetter } from "@/actions/cover-letter";
-import useFetch from "@/hooks/use-fetch";
-import html2pdf from "html2pdf.js/dist/html2pdf.min.js";
 
-const CoverLetterPreview = ({ id, content: initialContent }) => {
-  const [content, setContent] = useState(initialContent);
+import { Button } from "@/components/ui/button";
+import { PrintSurface } from "@/components/print-surface";
+import { EditorSkeleton } from "@/components/skeletons";
+import { updateCoverLetter } from "@/actions/cover-letter";
+import { exportElementToPdf, toSafeFilename } from "@/lib/pdf";
+import useFetch from "@/hooks/use-fetch";
+
+const MDEditor = dynamic(() => import("@uiw/react-md-editor"), {
+  ssr: false,
+  loading: () => <EditorSkeleton />,
+});
+
+const MDPreview = dynamic(
+  () => import("@uiw/react-md-editor").then((m) => m.default.Markdown),
+  { ssr: false }
+);
+
+export default function CoverLetterPreview({
+  id,
+  content: initialContent,
+  jobTitle,
+  companyName,
+}) {
+  const [content, setContent] = useState(initialContent ?? "");
   const [isEditing, setIsEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const {
-    loading: isSaving,
-    fn: saveCoverLetterFn,
-    data: saveResult,
-    error: saveError,
-  } = useFetch(updateCoverLetter);
+  const { loading: isSaving, fn: saveCoverLetterFn } =
+    useFetch(updateCoverLetter);
 
-  // Sync content if initialContent changes
   useEffect(() => {
-    setContent(initialContent);
+    setContent(initialContent ?? "");
   }, [initialContent]);
 
-  // Handle save result
   useEffect(() => {
-    if (saveResult && !isSaving) {
-      toast.success("Cover letter saved successfully!");
-      setIsEditing(false);
-    }
-    if (saveError) {
-      toast.error(saveError.message || "Failed to save cover letter");
-    }
-  }, [saveResult, saveError, isSaving]);
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    // Without this the timer fires after unmount and warns in the console.
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
-      toast.success("Copied to clipboard!");
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      toast.error("Failed to copy text");
+      toast.success("Copied to clipboard.");
+    } catch {
+      toast.error("Your browser blocked clipboard access.");
     }
   };
 
   const handleSave = async () => {
-    if (!content || !content.trim()) {
-      toast.error("Cover letter content cannot be empty");
+    if (!content.trim()) {
+      toast.error("The cover letter cannot be empty.");
       return;
     }
-    await saveCoverLetterFn(id, content);
+
+    const result = await saveCoverLetterFn(id, content);
+    if (result?.success) {
+      toast.success("Cover letter saved.");
+      setIsEditing(false);
+    }
   };
 
   const generatePDF = async () => {
     setIsDownloading(true);
     try {
-      const element = document.getElementById("cover-letter-pdf");
-      const opt = {
+      await exportElementToPdf(document.getElementById("cover-letter-pdf"), {
+        filename: `${toSafeFilename(
+          `${jobTitle}-${companyName}`,
+          "cover-letter"
+        )}.pdf`,
         margin: [20, 20],
-        filename: `cover-letter-${id.substring(0, 8)}.pdf`,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      };
-
-      await html2pdf().set(opt).from(element).save();
-      toast.success("PDF downloaded successfully!");
+      });
+      toast.success("PDF downloaded.");
     } catch (error) {
       console.error("PDF generation error:", error);
-      toast.error("Failed to generate PDF");
+      toast.error(error.message || "Failed to generate the PDF");
     } finally {
       setIsDownloading(false);
     }
   };
 
   return (
-    <div data-color-mode="light" className="space-y-4">
-      {/* Control Buttons */}
-      <div className="flex flex-wrap justify-between items-center gap-2 p-2 border rounded-lg bg-muted/40">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 p-2">
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -92,33 +101,28 @@ const CoverLetterPreview = ({ id, content: initialContent }) => {
           >
             {isEditing ? (
               <>
-                <Monitor className="h-4 w-4 mr-2" />
-                Show Preview
+                <Monitor className="mr-2 h-4 w-4" />
+                Preview
               </>
             ) : (
               <>
-                <Edit className="h-4 w-4 mr-2" />
-                Edit Markdown
+                <Edit className="mr-2 h-4 w-4" />
+                Edit
               </>
             )}
           </Button>
 
           {isEditing && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleSave}
-              disabled={isSaving}
-            >
+            <Button size="sm" onClick={handleSave} disabled={isSaving}>
               {isSaving ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving…
                 </>
               ) : (
                 <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Changes
+                  <Save className="mr-2 h-4 w-4" />
+                  Save changes
                 </>
               )}
             </Button>
@@ -129,60 +133,61 @@ const CoverLetterPreview = ({ id, content: initialContent }) => {
           <Button variant="outline" size="sm" onClick={handleCopy}>
             {copied ? (
               <>
-                <Check className="h-4 w-4 mr-2 text-green-500" />
+                <Check className="mr-2 h-4 w-4 text-success" />
                 Copied
               </>
             ) : (
               <>
-                <Copy className="h-4 w-4 mr-2" />
-                Copy Text
+                <Copy className="mr-2 h-4 w-4" />
+                Copy
               </>
             )}
           </Button>
 
-          <Button variant="outline" size="sm" onClick={generatePDF} disabled={isDownloading}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={generatePDF}
+            disabled={isDownloading}
+          >
             {isDownloading ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Downloading...
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Exporting…
               </>
             ) : (
               <>
-                <Download className="h-4 w-4 mr-2" />
-                Download PDF
+                <Download className="mr-2 h-4 w-4" />
+                PDF
               </>
             )}
           </Button>
         </div>
       </div>
 
-      {/* Editor & Preview */}
-      <div className="border rounded-lg overflow-hidden shadow-sm bg-white">
+      <div
+        className="overflow-hidden rounded-lg border border-border"
+        data-color-mode="light"
+      >
         <MDEditor
           value={content}
-          onChange={setContent}
+          onChange={(value) => setContent(value ?? "")}
           height={700}
           preview={isEditing ? "edit" : "preview"}
         />
       </div>
 
-      {/* Hidden container for PDF rendering */}
-      <div className="hidden">
-        <div id="cover-letter-pdf" className="p-8">
-          <MDEditor.Markdown
-            source={content}
-            style={{
-              background: "white",
-              color: "black",
-              fontFamily: "Inter, sans-serif",
-              fontSize: "14px",
-              lineHeight: "1.6",
-            }}
-          />
-        </div>
-      </div>
+      <PrintSurface id="cover-letter-pdf">
+        <MDPreview
+          source={content}
+          style={{
+            background: "#ffffff",
+            color: "#111111",
+            fontSize: "14px",
+            lineHeight: 1.65,
+          }}
+        />
+      </PrintSurface>
     </div>
   );
-};
-
-export default CoverLetterPreview;
+}

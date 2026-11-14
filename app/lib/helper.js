@@ -1,4 +1,59 @@
-// Helper function to convert entries to markdown
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/**
+ * `"2024-01"` (the value of `<input type="month">`) -> `"Jan 2024"`.
+ * Anything already human-readable, or empty, is passed through untouched.
+ */
+export function formatDisplayDate(value) {
+  if (!value) return "";
+  const match = /^(\d{4})-(\d{2})$/.exec(value.trim());
+  if (!match) return value;
+
+  const [, year, month] = match;
+  const name = MONTHS[Number(month) - 1];
+  return name ? `${name} ${year}` : value;
+}
+
+/**
+ * `"Jan 2024"` -> `"2024-01"`.
+ *
+ * This is the inverse the original code was missing. Entries were written to
+ * markdown as "Jan 2024" and read straight back into `<input type="month">`,
+ * which only accepts `yyyy-MM` — so every date silently blanked out the first
+ * time a saved resume was reopened, and the entry then failed validation.
+ */
+export function toMonthInputValue(value) {
+  if (!value) return "";
+  const trimmed = value.trim();
+
+  if (/^\d{4}-\d{2}$/.test(trimmed)) return trimmed;
+
+  const match = /^([A-Za-z]{3,})\.?\s+(\d{4})$/.exec(trimmed);
+  if (!match) return "";
+
+  const [, monthName, year] = match;
+  const index = MONTHS.findIndex(
+    (m) => m.toLowerCase() === monthName.slice(0, 3).toLowerCase()
+  );
+  if (index === -1) return "";
+
+  return `${year}-${String(index + 1).padStart(2, "0")}`;
+}
+
+/** Render a list of resume entries as a markdown section. */
 export function entriesToMarkdown(entries, type) {
   if (!entries?.length) return "";
 
@@ -6,126 +61,103 @@ export function entriesToMarkdown(entries, type) {
     `## ${type}\n\n` +
     entries
       .map((entry) => {
+        const start = formatDisplayDate(entry.startDate);
         const dateRange = entry.current
-          ? `${entry.startDate} - Present`
-          : `${entry.startDate} - ${entry.endDate}`;
+          ? `${start} - Present`
+          : `${start} - ${formatDisplayDate(entry.endDate)}`;
         return `### ${entry.title} @ ${entry.organization}\n${dateRange}\n\n${entry.description}`;
       })
       .join("\n\n")
   );
 }
 
-// Helper function to parse markdown content back to structured form entries
-export function parseMarkdownToForm(markdown) {
-  if (!markdown) return null;
+const SECTION_END = "(?=\\n\\s*##\\s|$)";
 
-  const contactInfo = {
-    email: "",
-    mobile: "",
-    linkedin: "",
-    twitter: "",
-  };
+function matchSection(markdown, heading) {
+  const regex = new RegExp(
+    `##\\s+${heading}\\s*\\n+([\\s\\S]*?)${SECTION_END}`,
+    "i"
+  );
+  const match = markdown.match(regex);
+  return match ? match[1].trim() : "";
+}
 
-  // Extract email
-  const emailMatch = markdown.match(/📧\s*([^\s|#\n]+)/);
-  if (emailMatch) contactInfo.email = emailMatch[1].trim();
+function parseEntrySection(markdown, heading) {
+  const content = matchSection(markdown, heading);
+  if (!content) return [];
 
-  // Extract mobile
-  const mobileMatch = markdown.match(/📱\s*([^\s|#\n]+(?:\s+[^\s|#\n]+)*)/);
-  if (mobileMatch) contactInfo.mobile = mobileMatch[1].trim();
-
-  // Extract LinkedIn
-  const linkedinMatch = markdown.match(/💼\s*\[LinkedIn\]\(([^)]+)\)/);
-  if (linkedinMatch) contactInfo.linkedin = linkedinMatch[1].trim();
-
-  // Extract Twitter
-  const twitterMatch = markdown.match(/🐦\s*\[Twitter\]\(([^)]+)\)/);
-  if (twitterMatch) contactInfo.twitter = twitterMatch[1].trim();
-
-  // Extract Summary
-  const summaryMatch = markdown.match(/## Professional Summary\s*\n\n([\s\S]*?)(?=\n\n## |$)/);
-  const summary = summaryMatch ? summaryMatch[1].trim() : "";
-
-  // Extract Skills
-  const skillsMatch = markdown.match(/## Skills\s*\n\n([\s\S]*?)(?=\n\n## |$)/);
-  const skills = skillsMatch ? skillsMatch[1].trim() : "";
-
-  // Helper to parse entries (Experience, Education, Projects)
-  const parseSection = (sectionName) => {
-    const sectionRegex = new RegExp(
-      `## ${sectionName}\\s*\\n\\n([\\s\\S]*?)(?=\\n\\n## |$)`
-    );
-    const match = markdown.match(sectionRegex);
-    if (!match) return [];
-
-    const sectionContent = match[1].trim();
-    if (!sectionContent) return [];
-
-    // Split by "### " using regex that matches at the start of a line
-    const parts = sectionContent.split(/^###\s+/m);
-    const entries = [];
-
-    for (const part of parts) {
-      if (!part.trim()) continue;
-
+  return content
+    .split(/^###\s+/m)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
       const lines = part.split("\n");
-      const headerLine = lines[0].trim();
-      
-      let title = headerLine;
+      const header = lines[0].trim();
+
+      let title = header;
       let organization = "";
-      if (headerLine.includes(" @ ")) {
-        const headerParts = headerLine.split(" @ ");
-        title = headerParts[0].trim();
-        organization = headerParts.slice(1).join(" @ ").trim();
+      if (header.includes(" @ ")) {
+        const [first, ...rest] = header.split(" @ ");
+        title = first.trim();
+        organization = rest.join(" @ ").trim();
       }
 
-      const dateLine = lines[1] ? lines[1].trim() : "";
+      const dateLine = (lines[1] ?? "").trim();
       let startDate = "";
       let endDate = "";
       let current = false;
+      let descriptionStart = 2;
 
-      let descriptionLinesStartIdx = 2;
-      
-      if (dateLine && (dateLine.includes(" - ") || dateLine.toLowerCase().includes("present"))) {
-        const dateParts = dateLine.split(/\s*-\s*/);
-        startDate = dateParts[0] ? dateParts[0].trim() : "";
-        const endPart = dateParts[1] ? dateParts[1].trim() : "";
-        if (endPart.toLowerCase() === "present") {
+      const isDateLine =
+        /\s-\s/.test(dateLine) || /present/i.test(dateLine);
+
+      if (isDateLine) {
+        const [rawStart = "", rawEnd = ""] = dateLine.split(/\s+-\s+/);
+        startDate = toMonthInputValue(rawStart);
+        if (/^present$/i.test(rawEnd.trim())) {
           current = true;
-          endDate = "";
         } else {
-          endDate = endPart;
+          endDate = toMonthInputValue(rawEnd);
         }
       } else {
-        descriptionLinesStartIdx = 1;
+        descriptionStart = 1;
       }
 
-      const description = lines.slice(descriptionLinesStartIdx).join("\n").trim();
-
-      entries.push({
+      return {
         title,
         organization,
         startDate,
         endDate,
         current,
-        description,
-      });
-    }
+        description: lines.slice(descriptionStart).join("\n").trim(),
+      };
+    });
+}
 
-    return entries;
-  };
+/** Parse a saved resume back into the shape the builder form expects. */
+export function parseMarkdownToForm(markdown) {
+  if (!markdown) return null;
 
-  const experience = parseSection("Work Experience");
-  const education = parseSection("Education");
-  const projects = parseSection("Projects");
+  const contactInfo = { email: "", mobile: "", linkedin: "", twitter: "" };
+
+  const email = markdown.match(/📧\s*([^\s|#\n]+)/);
+  if (email) contactInfo.email = email[1].trim();
+
+  const mobile = markdown.match(/📱\s*([^|#\n]+)/);
+  if (mobile) contactInfo.mobile = mobile[1].trim();
+
+  const linkedin = markdown.match(/💼\s*\[LinkedIn\]\(([^)]+)\)/);
+  if (linkedin) contactInfo.linkedin = linkedin[1].trim();
+
+  const twitter = markdown.match(/🐦\s*\[Twitter\]\(([^)]+)\)/);
+  if (twitter) contactInfo.twitter = twitter[1].trim();
 
   return {
     contactInfo,
-    summary,
-    skills,
-    experience,
-    education,
-    projects,
+    summary: matchSection(markdown, "Professional Summary"),
+    skills: matchSection(markdown, "Skills"),
+    experience: parseEntrySection(markdown, "Work Experience"),
+    education: parseEntrySection(markdown, "Education"),
+    projects: parseEntrySection(markdown, "Projects"),
   };
 }
-

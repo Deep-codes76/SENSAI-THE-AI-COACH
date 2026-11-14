@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -19,7 +18,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { generateCoverLetter } from "@/actions/cover-letter";
 import useFetch from "@/hooks/use-fetch";
 import { coverLetterSchema } from "@/app/lib/schema";
-import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function CoverLetterGenerator() {
@@ -34,26 +32,20 @@ export default function CoverLetterGenerator() {
     resolver: zodResolver(coverLetterSchema),
   });
 
-  const {
-    loading: generating,
-    fn: generateLetterFn,
-    data: generatedLetter,
-  } = useFetch(generateCoverLetter);
+  const { loading: generating, fn: generateLetterFn } =
+    useFetch(generateCoverLetter);
 
-  // Update content when letter is generated
-  useEffect(() => {
-    if (generatedLetter) {
-      toast.success("Cover letter generated successfully!");
-      router.push(`/ai-cover-letter/${generatedLetter.id}`);
-      reset();
-    }
-  }, [generatedLetter]);
-
+  /*
+   * The result is handled here rather than in an effect keyed on `data`. The
+   * effect version re-fired whenever the component re-rendered with the same
+   * result object and had an incomplete dependency list.
+   */
   const onSubmit = async (data) => {
-    try {
-      await generateLetterFn(data);
-    } catch (error) {
-      toast.error(error.message || "Failed to generate cover letter");
+    const letter = await generateLetterFn(data);
+    if (letter?.id) {
+      toast.success("Cover letter generated.");
+      reset();
+      router.push(`/ai-cover-letter/${letter.id}`);
     }
   };
 
@@ -63,7 +55,7 @@ export default function CoverLetterGenerator() {
         <CardHeader>
           <CardTitle>Job Details</CardTitle>
           <CardDescription>
-            Provide information about the position you're applying for
+            Provide information about the position you’re applying for
           </CardDescription>
         </CardHeader>
         <CardContent>

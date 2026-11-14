@@ -1,28 +1,28 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-header";
+
 import CoverLetterGenerator from "../_components/cover-letter-generator";
+
+export const metadata = { title: "New Cover Letter" };
 
 export default function NewCoverLetterPage() {
   return (
-    <div className="container mx-auto py-6">
-      <div className="flex flex-col space-y-2">
+    <div>
+      <Button asChild variant="link" className="mb-2 gap-2 pl-0">
         <Link href="/ai-cover-letter">
-          <Button variant="link" className="gap-2 pl-0">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Cover Letters
-          </Button>
+          <ArrowLeft className="h-4 w-4" />
+          Back to cover letters
         </Link>
+      </Button>
 
-        <div className="pb-6">
-          <h1 className="text-6xl font-bold gradient-title">
-            Create Cover Letter
-          </h1>
-          <p className="text-muted-foreground">
-            Generate a tailored cover letter for your job application
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="New"
+        title="Create a cover letter"
+        description="Paste the posting. Sensai writes a draft from your profile that you can edit and export."
+      />
 
       <CoverLetterGenerator />
     </div>

@@ -1,27 +1,37 @@
-import { BrainCircuit, Briefcase, LineChart, ScrollText } from "lucide-react";
+import { BrainCircuit, FileCheck2, LineChart, ScrollText } from "lucide-react";
 
+/**
+ * Icons are stored as components, not rendered elements, so the consuming
+ * section controls sizing and colour rather than every data file repeating
+ * the same Tailwind classes.
+ */
 export const features = [
   {
-    icon: <BrainCircuit className="w-10 h-10 mb-4 text-primary" />,
-    title: "AI-Powered Career Guidance",
+    icon: LineChart,
+    title: "Live industry insights",
     description:
-      "Get personalized career advice and insights powered by advanced AI technology.",
+      "Salary bands, demand level, growth rate and the skills your market is actually hiring for — refreshed weekly by a scheduled job.",
+    href: "/dashboard",
   },
   {
-    icon: <Briefcase className="w-10 h-10 mb-4 text-primary" />,
-    title: "Interview Preparation",
+    icon: ScrollText,
+    title: "Resume builder",
     description:
-      "Practice with role-specific questions and get instant feedback to improve your performance.",
+      "A structured editor that round-trips to markdown, so you can work in form fields or raw markdown and export a clean PDF.",
+    href: "/resume",
   },
   {
-    icon: <LineChart className="w-10 h-10 mb-4 text-primary" />,
-    title: "Industry Insights",
+    icon: FileCheck2,
+    title: "ATS scoring",
     description:
-      "Stay ahead with real-time industry trends, salary data, and market analysis.",
+      "Score your resume the way an applicant tracking system reads it, with concrete fixes and the keywords you are missing.",
+    href: "/resume",
   },
   {
-    icon: <ScrollText className="w-10 h-10 mb-4 text-primary" />,
-    title: "Smart Resume Creation",
-    description: "Generate ATS-optimized resumes with AI assistance.",
+    icon: BrainCircuit,
+    title: "Mock interviews",
+    description:
+      "Ten role-specific questions at a time, with explanations, a scored history and a tip generated from what you got wrong.",
+    href: "/interview",
   },
 ];

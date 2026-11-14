@@ -7,7 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "dev:demo": "NEXT_PUBLIC_DEMO_MODE=1 next dev",
+    "build:demo": "NEXT_PUBLIC_DEMO_MODE=1 next build"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.9.10",
@@ -46,11 +51,12 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
-    "eslint": "^9",
+    "@vitest/coverage-v8": "^2.1.9",
+    "eslint": "^8.57.1",
     "eslint-config-next": "15.1.4",
     "postcss": "^8",
     "prisma": "^6.12.0",
-    "tailwindcss": "^3.4.1"
+    "tailwindcss": "^3.4.1",
+    "vitest": "^2.1.9"
   }
 }
