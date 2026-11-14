@@ -1,97 +1,83 @@
 "use server";
 
-import { db } from "@/lib/prisma";
-import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
+
+import { db } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth";
+import { DEMO_MODE, demoDelay } from "@/lib/demo";
+
 import { generateAIInsights } from "./dashboard";
 
+/**
+ * Persist the onboarding profile.
+ *
+ * The AI call deliberately happens *before* the transaction: generating
+ * insights takes several seconds, and holding a Postgres transaction open for
+ * that long exhausted the pool and tripped Prisma's transaction timeout.
+ */
 export async function updateUser(data) {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  if (DEMO_MODE) {
+    await demoDelay(900);
+    return { success: true, industry: data.industry };
+  }
 
-  const user = await db.user.findUnique({
-    where: { clerkUserId: userId },
-  });
+  const user = await requireUser();
 
-  if (!user) throw new Error("User not found");
+  const industry = data.industry;
+  if (!industry) throw new Error("An industry is required");
 
   try {
-    // Start a transaction to handle both operations
-    const result = await db.$transaction(
-      async (tx) => {
-        // First check if industry exists
-        let industryInsight = await tx.industryInsight.findUnique({
-          where: {
-            industry: data.industry,
+    const existingInsight = await db.industryInsight.findUnique({
+      where: { industry },
+      select: { id: true },
+    });
+
+    const insights = existingInsight ? null : await generateAIInsights(industry);
+
+    const updatedUser = await db.$transaction(async (tx) => {
+      if (insights) {
+        await tx.industryInsight.upsert({
+          where: { industry },
+          update: {},
+          create: {
+            industry,
+            ...insights,
+            nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
           },
         });
-
-        // If industry doesn't exist, create it with default values
-        if (!industryInsight) {
-          const insights = await generateAIInsights(data.industry);
-
-          industryInsight = await db.industryInsight.create({
-            data: {
-              industry: data.industry,
-              ...insights,
-              nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-            },
-          });
-        }
-
-        // Now update the user
-        const updatedUser = await tx.user.update({
-          where: {
-            id: user.id,
-          },
-          data: {
-            industry: data.industry,
-            experience: data.experience,
-            bio: data.bio,
-            skills: data.skills,
-          },
-        });
-
-        return { updatedUser, industryInsight };
-      },
-      {
-        timeout: 10000, // default: 5000
       }
-    );
+
+      return tx.user.update({
+        where: { id: user.id },
+        data: {
+          industry,
+          experience: data.experience,
+          bio: data.bio,
+          skills: data.skills ?? [],
+        },
+      });
+    });
 
     revalidatePath("/");
-    return result.user;
+    revalidatePath("/dashboard");
+
+    // Server action results must be serialisable, and the client only needs
+    // to know the write landed — returning the whole row leaked the user's
+    // record into the browser for no reason.
+    return { success: true, industry: updatedUser.industry };
   } catch (error) {
-    console.error("Error updating user and industry:", error.message);
-    throw new Error("Failed to update profile");
+    console.error("Error updating user and industry:", error);
+    throw new Error(
+      error?.message?.includes("AI")
+        ? error.message
+        : "Failed to update profile. Please try again."
+    );
   }
 }
 
 export async function getUserOnboardingStatus() {
-  const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  if (DEMO_MODE) return { isOnboarded: true };
 
-  const user = await db.user.findUnique({
-    where: { clerkUserId: userId },
-  });
-
-  if (!user) throw new Error("User not found");
-
-  try {
-    const user = await db.user.findUnique({
-      where: {
-        clerkUserId: userId,
-      },
-      select: {
-        industry: true,
-      },
-    });
-
-    return {
-      isOnboarded: !!user?.industry,
-    };
-  } catch (error) {
-    console.error("Error checking onboarding status:", error);
-    throw new Error("Failed to check onboarding status");
-  }
+  const user = await requireUser({ industry: true });
+  return { isOnboarded: Boolean(user.industry) };
 }

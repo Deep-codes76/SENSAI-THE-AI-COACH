@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { ChevronLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,20 +15,25 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { generateQuiz, saveQuizResult } from "@/actions/interview";
-import QuizResult from "./quiz-result";
+import {
+  CATEGORY_KEYS,
+  QUIZ_CATEGORIES,
+} from "@/app/lib/interview-categories";
 import useFetch from "@/hooks/use-fetch";
-import { BarLoader } from "react-spinners";
-import { Loader2 } from "lucide-react";
+
+import QuizResult from "./quiz-result";
 
 export default function Quiz() {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState([]);
   const [showExplanation, setShowExplanation] = useState(false);
+  const [category, setCategory] = useState("technical");
 
   const {
     loading: generatingQuiz,
     fn: generateQuizFn,
     data: quizData,
+    setData: setQuizData,
   } = useFetch(generateQuiz);
 
   const {
@@ -37,82 +44,121 @@ export default function Quiz() {
   } = useFetch(saveQuizResult);
 
   useEffect(() => {
-    if (quizData) {
-      setAnswers(new Array(quizData.length).fill(null));
-    }
+    if (quizData) setAnswers(new Array(quizData.length).fill(null));
   }, [quizData]);
 
   const handleAnswer = (answer) => {
-    const newAnswers = [...answers];
-    newAnswers[currentQuestion] = answer;
-    setAnswers(newAnswers);
-  };
-
-  const handleNext = () => {
-    if (currentQuestion < quizData.length - 1) {
-      setCurrentQuestion(currentQuestion + 1);
-      setShowExplanation(false);
-    } else {
-      finishQuiz();
-    }
+    setAnswers((prev) => {
+      const next = [...prev];
+      next[currentQuestion] = answer;
+      return next;
+    });
   };
 
   const calculateScore = () => {
-    let correct = 0;
-    answers.forEach((answer, index) => {
-      if (answer === quizData[index].correctAnswer) {
-        correct++;
-      }
-    });
+    const correct = answers.reduce(
+      (count, answer, index) =>
+        answer === quizData[index]?.correctAnswer ? count + 1 : count,
+      0
+    );
     return (correct / quizData.length) * 100;
   };
 
-  const finishQuiz = async () => {
-    const score = calculateScore();
-    try {
-      await saveQuizResultFn(quizData, answers, score);
-      toast.success("Quiz completed!");
-    } catch (error) {
-      toast.error(error.message || "Failed to save quiz results");
+  const handleNext = async () => {
+    if (currentQuestion < quizData.length - 1) {
+      setCurrentQuestion((i) => i + 1);
+      setShowExplanation(false);
+      return;
     }
+
+    /*
+     * `useFetch` already catches and toasts, so the old try/catch here was
+     * dead code that made failures look handled. Instead the result is
+     * checked: when the save fails the user stays on the quiz with their
+     * answers intact rather than landing on a blank screen.
+     */
+    const saved = await saveQuizResultFn(
+      quizData,
+      answers,
+      calculateScore(),
+      category
+    );
+    if (saved) toast.success("Quiz complete.");
   };
 
   const startNewQuiz = () => {
     setCurrentQuestion(0);
     setAnswers([]);
     setShowExplanation(false);
-    generateQuizFn();
     setResultData(null);
+    setQuizData(undefined);
+    generateQuizFn(category);
   };
 
-  if (generatingQuiz) {
-    return <BarLoader className="mt-4" width={"100%"} color="gray" />;
+  if (resultData) {
+    return <QuizResult result={resultData} onStartNew={startNewQuiz} />;
   }
 
-  // Show results if quiz is completed
-  if (resultData) {
+  if (generatingQuiz) {
     return (
-      <div className="mx-2">
-        <QuizResult result={resultData} onStartNew={startNewQuiz} />
-      </div>
+      <Card>
+        <CardContent className="flex flex-col items-center gap-4 py-20 text-center">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <div>
+            <p className="font-medium">Writing your questions…</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ten questions tailored to your industry and skills.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   if (!quizData) {
     return (
-      <Card className="mx-2">
+      <Card>
         <CardHeader>
           <CardTitle>Ready to test your knowledge?</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-5">
           <p className="text-muted-foreground">
-            This quiz contains 10 questions specific to your industry and
-            skills. Take your time and choose the best answer for each question.
+            Ten multiple-choice questions specific to your industry and skills.
+            You can reveal an explanation for each one after answering, and your
+            score is saved to your performance history.
           </p>
+
+          <div className="space-y-3">
+            <p className="section-label">Pick a round</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {CATEGORY_KEYS.map((key) => {
+                const option = QUIZ_CATEGORIES[key];
+                const selected = category === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setCategory(key)}
+                    className={`rounded-lg border p-4 text-left transition-colors ${
+                      selected
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-muted/60"
+                    }`}
+                  >
+                    <span className="block font-medium">{option.label}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {option.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </CardContent>
         <CardFooter>
-          <Button onClick={generateQuizFn} className="w-full">
-            Start Quiz
+          <Button onClick={() => generateQuizFn(category)} className="w-full">
+            Start {QUIZ_CATEGORIES[category].label.toLowerCase()} quiz
           </Button>
         </CardFooter>
       </Card>
@@ -120,60 +166,105 @@ export default function Quiz() {
   }
 
   const question = quizData[currentQuestion];
+  const answered = Boolean(answers[currentQuestion]);
+  const progress = ((currentQuestion + 1) / quizData.length) * 100;
+  const isLast = currentQuestion === quizData.length - 1;
 
   return (
-    <Card className="mx-2">
-      <CardHeader>
-        <CardTitle>
-          Question {currentQuestion + 1} of {quizData.length}
-        </CardTitle>
+    <Card>
+      <CardHeader className="space-y-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base font-medium text-muted-foreground">
+            {QUIZ_CATEGORIES[category].label} · question {currentQuestion + 1} of{" "}
+            {quizData.length}
+          </CardTitle>
+          <span className="numeric text-xs text-muted-foreground">
+            {answers.filter(Boolean).length} answered
+          </span>
+        </div>
+        <div
+          className="h-1 w-full overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-valuenow={Math.round(progress)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div
+            className="h-full bg-primary transition-[width] duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-lg font-medium">{question.question}</p>
+
+      <CardContent className="space-y-5">
+        <p className="text-lg font-medium leading-snug">{question.question}</p>
+
         <RadioGroup
           onValueChange={handleAnswer}
-          value={answers[currentQuestion]}
+          value={answers[currentQuestion] ?? ""}
           className="space-y-2"
         >
           {question.options.map((option, index) => (
-            <div key={index} className="flex items-center space-x-2">
-              <RadioGroupItem value={option} id={`option-${index}`} />
-              <Label htmlFor={`option-${index}`}>{option}</Label>
-            </div>
+            <Label
+              key={index}
+              htmlFor={`q${currentQuestion}-option-${index}`}
+              className="flex cursor-pointer items-center gap-3 rounded-lg border border-border p-3.5 font-normal transition-colors hover:bg-muted/60 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+            >
+              <RadioGroupItem
+                value={option}
+                id={`q${currentQuestion}-option-${index}`}
+              />
+              <span>{option}</span>
+            </Label>
           ))}
         </RadioGroup>
 
         {showExplanation && (
-          <div className="mt-4 p-4 bg-muted rounded-lg">
-            <p className="font-medium">Explanation:</p>
-            <p className="text-muted-foreground">{question.explanation}</p>
+          <div className="animate-fade-up rounded-lg border border-border bg-muted/50 p-4">
+            <p className="mb-1 text-sm font-medium">Explanation</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {question.explanation}
+            </p>
           </div>
         )}
       </CardContent>
-      <CardFooter className="flex justify-between">
-        {!showExplanation && (
+
+      <CardFooter className="flex flex-wrap justify-between gap-2">
+        <div className="flex gap-2">
+          {/* There was previously no way back to review an earlier answer. */}
           <Button
-            onClick={() => setShowExplanation(true)}
-            variant="outline"
-            disabled={!answers[currentQuestion]}
+            variant="ghost"
+            onClick={() => {
+              setCurrentQuestion((i) => Math.max(0, i - 1));
+              setShowExplanation(false);
+            }}
+            disabled={currentQuestion === 0}
           >
-            Show Explanation
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            Back
           </Button>
-        )}
-        <Button
-          onClick={handleNext}
-          disabled={!answers[currentQuestion] || savingResult}
-          className="ml-auto"
-        >
+
+          {!showExplanation && (
+            <Button
+              variant="outline"
+              onClick={() => setShowExplanation(true)}
+              disabled={!answered}
+            >
+              Show explanation
+            </Button>
+          )}
+        </div>
+
+        <Button onClick={handleNext} disabled={!answered || savingResult}>
           {savingResult ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving...
+              Saving…
             </>
-          ) : currentQuestion < quizData.length - 1 ? (
-            "Next Question"
+          ) : isLast ? (
+            "Finish quiz"
           ) : (
-            "Finish Quiz"
+            "Next question"
           )}
         </Button>
       </CardFooter>

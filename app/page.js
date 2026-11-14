@@ -1,182 +1,176 @@
-import React from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  ArrowRight,
-  Trophy,
-  Target,
-  Sparkles,
-  CheckCircle2,
-} from "lucide-react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
+
 import HeroSection from "@/components/hero";
+import Reveal from "@/components/reveal";
+import { Button } from "@/components/ui/button";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import Image from "next/image";
 import { features } from "@/data/features";
-import { testimonial } from "@/data/testimonial";
-import { faqs } from "@/data/faqs";
 import { howItWorks } from "@/data/howItWorks";
+import { faqs } from "@/data/faqs";
+import { capabilities, techStack } from "@/data/techStack";
+
+function SectionHeading({ index, label, title, description }) {
+  return (
+    <div className="mb-14 max-w-2xl">
+      <div className="mb-5 flex items-center gap-4">
+        <span className="seal font-mono text-xs text-primary">{index}</span>
+        <span className="section-label">{label}</span>
+      </div>
+      <h2 className="text-balance text-3xl leading-tight md:text-5xl">
+        {title}
+      </h2>
+      {description && (
+        <p className="mt-4 text-pretty leading-relaxed text-muted-foreground">
+          {description}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function LandingPage() {
   return (
     <>
-      <div className="grid-background"></div>
-
-      {/* Hero Section */}
       <HeroSection />
 
-      {/* Features Section */}
-      <section className="w-full py-12 md:py-24 lg:py-32 bg-background">
-        <div className="container mx-auto px-4 md:px-6">
-          <h2 className="text-3xl font-bold tracking-tighter text-center mb-12">
-            Powerful Features for Your Career Growth
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+      {/* ── Features ─────────────────────────────────────────────── */}
+      <section id="features" className="border-t border-border py-20 md:py-28">
+        <div className="container">
+          <SectionHeading
+            index="01"
+            label="What it does"
+            title="Six tools, one profile."
+            description="Onboarding happens once. Every tool below reads the same industry, experience and skills, so nothing has to be re-explained."
+          />
+
+          <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
             {features.map((feature, index) => (
-              <Card
-                key={index}
-                className="border-2 hover:border-primary transition-colors duration-300"
-              >
-                <CardContent className="pt-6 text-center flex flex-col items-center">
-                  <div className="flex flex-col items-center justify-center">
-                    {feature.icon}
-                    <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
-                    <p className="text-muted-foreground">
-                      {feature.description}
-                    </p>
+              <Reveal key={feature.title} delay={index * 70}>
+                <Link
+                  href={feature.href}
+                  className="group flex h-full flex-col bg-card p-7 transition-colors hover:bg-muted/50 md:p-9"
+                >
+                  <div className="mb-6 flex items-start justify-between">
+                    <feature.icon
+                      className="h-7 w-7 text-primary"
+                      strokeWidth={1.5}
+                    />
+                    <ArrowUpRight className="h-4 w-4 -translate-x-1 translate-y-1 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100" />
                   </div>
-                </CardContent>
-              </Card>
+                  <h3 className="mb-3 text-xl md:text-2xl">{feature.title}</h3>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {feature.description}
+                  </p>
+                </Link>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="w-full py-12 md:py-24 bg-muted/50">
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto text-center">
-            <div className="flex flex-col items-center justify-center space-y-2">
-              <h3 className="text-4xl font-bold">50+</h3>
-              <p className="text-muted-foreground">Industries Covered</p>
-            </div>
-            <div className="flex flex-col items-center justify-center space-y-2">
-              <h3 className="text-4xl font-bold">1000+</h3>
-              <p className="text-muted-foreground">Interview Questions</p>
-            </div>
-            <div className="flex flex-col items-center justify-center space-y-2">
-              <h3 className="text-4xl font-bold">95%</h3>
-              <p className="text-muted-foreground">Success Rate</p>
-            </div>
-            <div className="flex flex-col items-center justify-center space-y-2">
-              <h3 className="text-4xl font-bold">24/7</h3>
-              <p className="text-muted-foreground">AI Support</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works Section */}
-      <section className="w-full py-12 md:py-24 bg-background">
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="text-center max-w-3xl mx-auto mb-12">
-            <h2 className="text-3xl font-bold mb-4">How It Works</h2>
-            <p className="text-muted-foreground">
-              Four simple steps to accelerate your career growth
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
-            {howItWorks.map((item, index) => (
-              <div
-                key={index}
-                className="flex flex-col items-center text-center space-y-4"
-              >
-                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                  {item.icon}
+      {/* ── Capability figures ───────────────────────────────────── */}
+      <section className="border-t border-border bg-muted/30 py-16">
+        <div className="container">
+          <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+            {capabilities.map((stat, index) => (
+              <Reveal key={stat.label} delay={index * 60}>
+                <div className="border-l-2 border-primary/40 pl-5">
+                  <p className="numeric text-4xl font-semibold tracking-tight">
+                    {stat.value}
+                  </p>
+                  <p className="mt-2 font-medium">{stat.label}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {stat.detail}
+                  </p>
                 </div>
-                <h3 className="font-semibold text-xl">{item.title}</h3>
-                <p className="text-muted-foreground">{item.description}</p>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="w-full py-12 md:py-24 bg-muted/50">
-        <div className="container mx-auto px-4 md:px-6">
-          <h2 className="text-3xl font-bold text-center mb-12">
-            What Our Users Say
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {testimonial.map((testimonial, index) => (
-              <Card key={index} className="bg-background">
-                <CardContent className="pt-6">
-                  <div className="flex flex-col space-y-4">
-                    <div className="flex items-center space-x-4 mb-4">
-                      <div className="relative h-12 w-12 flex-shrink-0">
-                        <Image
-                          width={40}
-                          height={40}
-                          src={testimonial.image}
-                          alt={testimonial.author}
-                          className="rounded-full object-cover border-2 border-primary/20"
-                        />
-                      </div>
-                      <div>
-                        <p className="font-semibold">{testimonial.author}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {testimonial.role}
-                        </p>
-                        <p className="text-sm text-primary">
-                          {testimonial.company}
-                        </p>
-                      </div>
-                    </div>
-                    <blockquote>
-                      <p className="text-muted-foreground italic relative">
-                        <span className="text-3xl text-primary absolute -top-4 -left-2">
-                          &quot;
-                        </span>
-                        {testimonial.quote}
-                        <span className="text-3xl text-primary absolute -bottom-4">
-                          &quot;
-                        </span>
-                      </p>
-                    </blockquote>
+      {/* ── How it works ─────────────────────────────────────────── */}
+      <section id="how-it-works" className="border-t border-border py-20 md:py-28">
+        <div className="container">
+          <SectionHeading
+            index="02"
+            label="The loop"
+            title="Set up once, then practise."
+          />
+
+          <ol className="relative grid gap-10 md:grid-cols-4 md:gap-6">
+            {/* Connector rule, drawn behind the step markers. */}
+            <span
+              aria-hidden="true"
+              className="absolute left-0 right-0 top-6 hidden h-px bg-border md:block"
+            />
+            {howItWorks.map((step, index) => (
+              <Reveal key={step.title} delay={index * 80}>
+                <li className="relative list-none">
+                  <div className="relative z-10 mb-6 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background">
+                    <step.icon className="h-5 w-5 text-primary" strokeWidth={1.5} />
                   </div>
-                </CardContent>
-              </Card>
+                  <p className="numeric mb-2 text-xs text-primary">
+                    {String(index + 1).padStart(2, "0")}
+                  </p>
+                  <h3 className="mb-2 text-lg">{step.title}</h3>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {step.description}
+                  </p>
+                </li>
+              </Reveal>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* ── Under the hood ───────────────────────────────────────── */}
+      <section className="border-t border-border bg-muted/30 py-20 md:py-28">
+        <div className="container">
+          <SectionHeading
+            index="03"
+            label="Under the hood"
+            title="Built as a production app, not a demo."
+            description="Server Actions for every mutation, validated AI output, scoped database queries, and a scheduled job that keeps market data current."
+          />
+
+          <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
+            {techStack.map((item, index) => (
+              <Reveal key={item.name} delay={index * 50}>
+                <div className="h-full bg-card p-6">
+                  <p className="font-mono text-sm font-medium text-primary">
+                    {item.name}
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    {item.role}
+                  </p>
+                </div>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      {/* FAQ Section */}
-      <section className="w-full py-12 md:py-24">
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="text-center max-w-3xl mx-auto mb-12">
-            <h2 className="text-3xl font-bold mb-4">
-              Frequently Asked Questions
-            </h2>
-            <p className="text-muted-foreground">
-              Find answers to common questions about our platform
-            </p>
-          </div>
-
-          <div className="max-w-3xl mx-auto">
+      {/* ── FAQ ──────────────────────────────────────────────────── */}
+      <section className="border-t border-border py-20 md:py-28">
+        <div className="container">
+          <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
+            <SectionHeading index="04" label="Questions" title="Good to know." />
             <Accordion type="single" collapsible className="w-full">
               {faqs.map((faq, index) => (
                 <AccordionItem key={index} value={`item-${index}`}>
-                  <AccordionTrigger className="text-left">
+                  <AccordionTrigger className="text-left text-base font-medium hover:no-underline">
                     {faq.question}
                   </AccordionTrigger>
-                  <AccordionContent>{faq.answer}</AccordionContent>
+                  <AccordionContent className="text-pretty leading-relaxed text-muted-foreground">
+                    {faq.answer}
+                  </AccordionContent>
                 </AccordionItem>
               ))}
             </Accordion>
@@ -184,26 +178,32 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="w-full">
-        <div className="mx-auto py-24 gradient rounded-lg">
-          <div className="flex flex-col items-center justify-center space-y-4 text-center max-w-3xl mx-auto">
-            <h2 className="text-3xl font-bold tracking-tighter text-primary-foreground sm:text-4xl md:text-5xl">
-              Ready to Accelerate Your Career?
-            </h2>
-            <p className="mx-auto max-w-[600px] text-primary-foreground/80 md:text-xl">
-              Join thousands of professionals who are advancing their careers
-              with AI-powered guidance.
-            </p>
-            <Link href="/dashboard" passHref>
-              <Button
-                size="lg"
-                variant="secondary"
-                className="h-11 mt-5 animate-bounce"
-              >
-                Start Your Journey Today <ArrowRight className="ml-2 h-4 w-4" />
+      {/* ── CTA ──────────────────────────────────────────────────── */}
+      <section className="border-t border-border py-20 md:py-28">
+        <div className="container">
+          <div className="relative overflow-hidden rounded-2xl border border-border bg-card px-6 py-16 text-center md:px-12 md:py-20">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-0 h-56 opacity-70"
+              style={{
+                background:
+                  "radial-gradient(closest-side, hsl(var(--primary) / 0.18), transparent)",
+              }}
+            />
+            <div className="relative">
+              <h2 className="mx-auto max-w-2xl text-balance text-3xl leading-tight md:text-5xl">
+                Your next interview is already on the calendar.
+              </h2>
+              <p className="mx-auto mt-5 max-w-lg text-pretty text-muted-foreground">
+                Set up your profile in under a minute and start practising.
+              </p>
+              <Button asChild size="lg" className="group mt-9 h-12 px-8 text-base">
+                <Link href="/dashboard">
+                  Get started
+                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </Link>
               </Button>
-            </Link>
+            </div>
           </div>
         </div>
       </section>
