@@ -136,9 +136,53 @@ drift — neither of which a mock can catch.
 
 ## Deploying
 
-Deploys to Vercel as-is. Set the environment variables above, point `DATABASE_URL` at a pooled connection, and register `/api/inngest` as the Inngest serve endpoint so the weekly refresh runs.
+### Render
 
-For a public demo with no backing services, set `NEXT_PUBLIC_DEMO_MODE=1` and deploy — nothing else is required.
+A [Blueprint](https://render.com/docs/blueprint-spec) is committed as `render.yaml`.
+In the Render dashboard choose **New → Blueprint**, pick this repository, and
+supply the five secrets it prompts for:
+
+| Variable | Where it comes from |
+|---|---|
+| `DATABASE_URL` | Neon → Connection string (the **pooled** one) |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk → API keys |
+| `CLERK_SECRET_KEY` | Clerk → API keys |
+| `GEMINI_API_KEY` | Google AI Studio |
+| `NEXT_PUBLIC_SITE_URL` | The Render URL, e.g. `https://sensai.onrender.com` |
+
+To configure it by hand instead, create a **Web Service** with:
+
+- **Build command** — `npm ci && npx prisma migrate deploy && npm run build`
+- **Start command** — `npm start`
+- **Health check path** — `/`
+- **Node version** — 20 (pinned by `.node-version`)
+
+Three things worth knowing:
+
+- Migrations run in the build command rather than a `preDeployCommand`, because
+  that field requires a paid compute plan. `migrate deploy` is idempotent, so
+  running it on every deploy is safe.
+- `NEXT_PUBLIC_*` values are inlined into the client bundle at build time, so
+  changing one requires a rebuild, not just a restart.
+- `next start` already binds `0.0.0.0` and reads Render's `PORT`, so no extra
+  flags are needed.
+
+After the first deploy, add the Render URL to Clerk under **Domains**, and
+point the Inngest serve endpoint at `/api/inngest` so the weekly insight
+refresh runs.
+
+On Render's free compute plan the service sleeps after inactivity, so the
+first request after an idle period is slow. Use a paid instance if that
+matters.
+
+### Anywhere else
+
+The app is a standard Next.js server — Vercel, Fly, Railway and a plain
+container all work. Set the same environment variables, run
+`npx prisma migrate deploy` before serving, and start with `next start`.
+
+For a public demo with no backing services, set `NEXT_PUBLIC_DEMO_MODE=1` and
+deploy; no database, auth instance or AI key is required.
 
 ---
 
