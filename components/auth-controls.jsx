@@ -8,10 +8,13 @@ import MobileNav from "@/components/mobile-nav";
  * The Clerk-dependent half of the header, split out so that demo mode can
  * render the same navigation without instantiating Clerk at all.
  */
-export default function AuthControls({ signedInNav, children }) {
+export default function AuthControls({ signedInNav, trigger, children }) {
   return (
     <>
-      <SignedIn>{signedInNav}</SignedIn>
+      <SignedIn>
+        {trigger}
+        {signedInNav}
+      </SignedIn>
 
       <SignedOut>
         <Button asChild variant="ghost" className="hidden sm:inline-flex">

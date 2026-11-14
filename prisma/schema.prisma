@@ -1,5 +1,8 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // Lets the client run on an HTTP driver instead of a raw TCP socket, which
+  // is what makes Neon usable from serverless runtimes.
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -23,10 +26,11 @@ model User {
   experience Int? // Years of experience
 
   // Relations
-  skills      String[] // Array of skills
-  assessments Assessment[]
-  resume      Resume?
-  coverLetter CoverLetter[]
+  skills          String[] // Array of skills
+  assessments     Assessment[]
+  resume          Resume?
+  coverLetter     CoverLetter[]
+  jobApplications JobApplication[]
 }
 
 model Assessment {
@@ -96,4 +100,34 @@ model IndustryInsight {
   nextUpdate  DateTime // Scheduled update time
 
   @@index([industry])
+}
+
+/// A tracked job application.
+///
+/// Closes the loop the rest of the app opens: insights inform the resume, the
+/// resume feeds the cover letter, the cover letter targets a posting — and
+/// this is where that posting is followed through to an outcome.
+model JobApplication {
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+
+  company  String
+  role     String
+  location String?
+  url      String?
+  source   String? // where the posting was found
+  salary   String? // free text: bands are rarely clean numbers
+
+  /// saved | applied | interviewing | offer | rejected
+  status String @default("saved")
+
+  notes     String?
+  appliedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
 }

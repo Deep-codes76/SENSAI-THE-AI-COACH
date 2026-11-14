@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Briefcase,
   FileText,
   GraduationCap,
   LayoutDashboard,
@@ -24,6 +25,12 @@ const items = [
     label: "Industry Insights",
     description: "Salary, demand and trends",
     Icon: LayoutDashboard,
+  },
+  {
+    href: "/applications",
+    label: "Applications",
+    description: "Track every role you are chasing",
+    Icon: Briefcase,
   },
   {
     href: "/resume",

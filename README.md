@@ -18,7 +18,10 @@ Next.js 15 · React 19 · Prisma · Postgres · Clerk · Google Gemini · Innges
 | **Resume builder** | A structured form that round-trips losslessly to markdown. Work in either representation and export a clean A4 PDF. |
 | **ATS scoring** | Scores the resume the way an applicant tracking system reads it, with strengths, concrete improvements and the keywords you are missing. |
 | **Cover letters** | A tailored draft per posting, generated from your profile and the job description, editable in markdown and exportable to PDF. |
-| **Mock interviews** | Ten role-specific multiple-choice questions at a time, with explanations, a scored history, a performance trend and an AI tip derived from what you got wrong. |
+| **Mock interviews** | Technical, system design or behavioural rounds — ten role-specific questions at a time, with explanations, a scored history, a performance trend and an AI tip derived from what you got wrong. |
+| **Application tracker** | A pipeline board from saved through to offer, with notes, posting links and a response rate that counts only what you actually submitted. |
+| **Skill coverage** | Your profile's skills matched against what the market is hiring for, with the gap listed explicitly. |
+| **Command palette** | `⌘K` / `Ctrl-K` to reach any surface or action. |
 
 ## Try it without any API keys
 
@@ -38,13 +41,20 @@ npx prisma migrate deploy
 npm run dev
 ```
 
+> **Upgrading an existing deployment:** this release adds the `JobApplication`
+> table. Run `npx prisma migrate deploy` before serving it — until you do, the
+> tracker page renders an explicit "run migrations" notice rather than failing.
+>
+> If your database predates the committed migration history, baseline it once
+> with `npx prisma migrate resolve --applied 0_init`, then deploy as usual.
+
 | Variable | Required | Purpose |
 |---|---|---|
 | `DATABASE_URL` | yes | Postgres connection string |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | yes | Clerk client key |
 | `CLERK_SECRET_KEY` | yes | Clerk server key |
 | `GEMINI_API_KEY` | yes | Google Gemini |
-| `GEMINI_MODEL` | no | Defaults to `gemini-2.0-flash` |
+| `GEMINI_MODEL` | no | Defaults to `gemini-3.5-flash` |
 | `NEXT_PUBLIC_SITE_URL` | no | Absolute URL for Open Graph tags |
 | `NEXT_PUBLIC_DEMO_MODE` | no | `1` runs against fixtures |
 
@@ -73,7 +83,9 @@ Browser
 - **Slow work stays out of transactions.** Insight generation takes seconds; it runs *before* the Prisma transaction rather than inside it, so the connection pool is never held open on a network call.
 - **Authorization is a query constraint, not a check.** Reads use `findFirst({ where: { id, userId } })` and writes use `updateMany` / `deleteMany` with the same scope, so a forged id touches zero rows instead of leaking a record's existence.
 - **The heavy client deps are lazy.** The markdown editor and PDF generator are dynamically imported, which took the resume route from 737 kB to 163 kB of first-load JS.
-- **Motion is progressive enhancement.** Scroll reveals are armed by an inline script and backed by a timeout, so content can never be stranded at `opacity: 0`.
+- **Motion is progressive enhancement.** Scroll reveals are a CSS scroll timeline layered over content that is visible by default, so nothing can be stranded at `opacity: 0` if a script fails.
+- **Neon runs over HTTP.** Prisma uses the Neon serverless adapter when `DATABASE_URL` points at Neon, which suits serverless runtimes and removes the per-invocation TCP handshake. Any other Postgres host falls back to the standard driver, so the project is not locked to one provider.
+- **Lookups are own-key checked.** Indexing a config map by a user-supplied string resolves inherited keys — `"constructor"` is truthy on any object — so status and category lookups go through a `Set` of known keys. A unit test covers exactly that case.
 
 ## Project layout
 
@@ -100,14 +112,20 @@ tests/            Vitest unit tests
 | `npm run lint` | ESLint |
 | `npm run test` | Vitest |
 | `npm run coverage` | Vitest with a coverage report |
+| `npm run test:integration` | Live checks against Gemini and the database (skipped without credentials) |
 
 ## Tests
 
-40 unit tests cover the parts where a silent bug is most expensive: the markdown ⇄ form codec (including a full round-trip), the validation schemas, AI response parsing and the retry policy.
+55 unit tests cover the parts where a silent bug is most expensive: the markdown ⇄ form codec (including a full round-trip), the validation schemas, AI response parsing, the retry policy, skill matching and the application funnel maths.
 
 ```bash
-npm run test
+npm run test            # hermetic, no credentials needed
+npm run test:integration  # live Gemini + database, skipped without credentials
 ```
+
+The integration suite exists because the unit tests mock the model away, and
+the failure that actually bites in production is a retired model id or schema
+drift — neither of which a mock can catch.
 
 ## Deploying
 

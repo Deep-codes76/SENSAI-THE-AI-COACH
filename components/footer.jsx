@@ -8,6 +8,7 @@ const columns = [
     title: "Product",
     links: [
       { href: "/dashboard", label: "Industry Insights" },
+      { href: "/applications", label: "Applications" },
       { href: "/resume", label: "Resume Builder" },
       { href: "/ai-cover-letter", label: "Cover Letters" },
       { href: "/interview", label: "Interview Prep" },

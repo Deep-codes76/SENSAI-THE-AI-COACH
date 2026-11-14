@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  Briefcase,
   ChevronDown,
   FileText,
   GraduationCap,
@@ -21,10 +22,19 @@ import Logo from "@/components/logo";
 import MobileNav from "@/components/mobile-nav";
 import ThemeToggle from "@/components/theme-toggle";
 import AuthControls from "@/components/auth-controls";
+import CommandPalette, {
+  CommandPaletteTrigger,
+} from "@/components/command-palette";
 import { checkUser } from "@/lib/checkUser";
 import { DEMO_MODE } from "@/lib/demo";
 
 export const growthTools = [
+  {
+    href: "/applications",
+    label: "Applications",
+    description: "Track every role you are chasing",
+    icon: Briefcase,
+  },
   {
     href: "/resume",
     label: "Resume Builder",
@@ -109,17 +119,23 @@ export default async function Header() {
         <div className="flex items-center gap-1.5 md:gap-2">
           {DEMO_MODE ? (
             <>
+              <CommandPaletteTrigger />
               <SignedInNav />
               <ThemeToggle />
               <MobileNav />
             </>
           ) : (
-            <AuthControls signedInNav={<SignedInNav />}>
+            <AuthControls
+              signedInNav={<SignedInNav />}
+              trigger={<CommandPaletteTrigger />}
+            >
               <ThemeToggle />
             </AuthControls>
           )}
         </div>
       </nav>
+
+      <CommandPalette />
     </header>
   );
 }
