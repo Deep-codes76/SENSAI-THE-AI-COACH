@@ -45,8 +45,15 @@ npm run dev
 > table. Run `npx prisma migrate deploy` before serving it — until you do, the
 > tracker page renders an explicit "run migrations" notice rather than failing.
 >
-> If your database predates the committed migration history, baseline it once
-> with `npx prisma migrate resolve --applied 0_init`, then deploy as usual.
+> If your database predates the committed migration history, `0_init` will
+> fail because the tables already exist. Baseline it once with
+> `npx prisma migrate resolve --applied 0_init`, then run
+> `npx prisma migrate deploy` again.
+>
+> Note that `migrate resolve --applied` only *records* a migration as done; it
+> never executes the SQL. That is why the tracker table ships in its own
+> migration, written idempotently so it applies correctly whether the database
+> was baselined or built from scratch.
 
 | Variable | Required | Purpose |
 |---|---|---|
